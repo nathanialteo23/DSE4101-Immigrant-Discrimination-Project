@@ -14,11 +14,36 @@
 # deliberate, defensible deviation -- just document it explicitly as such,
 # since it differs from what the original paper did.
 
+# --- Package bootstrap: install anything missing, then load --------------------
+required_packages <- c("haven", "estimatr", "dplyr")
+missing_packages  <- setdiff(required_packages, rownames(installed.packages()))
+if (length(missing_packages) > 0) {
+  install.packages(missing_packages, repos = "https://cloud.r-project.org")
+}
 library(haven)
 library(estimatr)   # lm_robust() for robust SEs and fixed effects
 library(dplyr)
 
-df <- read_dta("data/oreopoulos-resume-study-replication-data-file.dta")
+# --- Locate the data file -----------------------------------------------------
+# Resolve relative to this script's directory so it runs regardless of the
+# current working directory (source(), Rscript, or an IDE "Run" button).
+this_dir <- tryCatch(
+  dirname(normalizePath(sys.frame(1)$ofile)),
+  error = function(e) getwd()
+)
+data_path <- file.path(this_dir, "data",
+                       "oreopoulos-resume-study-replication-data-file.dta")
+if (!file.exists(data_path)) {
+  # Fall back to a path relative to the current working directory.
+  data_path <- file.path("data", "oreopoulos-resume-study-replication-data-file.dta")
+}
+if (!file.exists(data_path)) {
+  stop("Data file not found. Expected it at: ",
+       normalizePath(file.path(this_dir, "data"), mustWork = FALSE),
+       "/oreopoulos-resume-study-replication-data-file.dta")
+}
+
+df <- read_dta(data_path)
 
 # Recode type and fall_data as factors (mirrors Stata's `i.type i.fall_data`)
 df <- df %>%

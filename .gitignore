@@ -1,0 +1,13 @@
+# Data (keep raw microdata out of the repo)
+data/
+*.dta
+*.csv
+*.rds
+*.RData
+
+# R session / IDE artifacts
+.Rproj.user/
+.Rhistory
+.RData
+.Ruserdata
+*.Rproj
