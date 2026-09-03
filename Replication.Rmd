@@ -1,0 +1,244 @@
+---
+title: "Oreopoulos (2011) Replication --- Tables 4 & 5"
+author: "DSE4101 Immigrant Discrimination Project"
+date: "`r Sys.Date()`"
+output:
+  html_document:
+    toc: true
+    toc_float: true
+    df_print: paged
+---
+
+```{r knitr-opts, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE)
+```
+
+This document is a faithful R translation of the author's original Stata do-file
+(`oreopoulos-resume-study-replication-do-file.do`).
+
+**Note on standard errors.** The original Stata code uses `robust`
+(heteroskedasticity-robust, Eicker-Huber-White) SEs throughout, and
+`absorb(firmid)` (firm fixed effects, *not* clustering) as an alternative
+specification in Table 5. It does **not** use cluster-robust SEs anywhere. This
+script replicates that exactly. If your own extension analysis (interaction
+models, causal forest) clusters by `firmid` instead, that is a deliberate,
+defensible deviation --- just document it explicitly, since it differs from what
+the original paper did.
+
+# Setup
+
+```{r setup}
+# --- Package bootstrap: install anything missing, then load ------------------
+required_packages <- c("haven", "estimatr", "dplyr")
+missing_packages  <- setdiff(required_packages, rownames(installed.packages()))
+if (length(missing_packages) > 0) {
+  install.packages(missing_packages, repos = "https://cloud.r-project.org")
+}
+library(haven)
+library(estimatr)   # lm_robust() for robust SEs and fixed effects
+library(dplyr)
+
+# --- Load data -------------------------------------------------------------
+# When knitting, knitr sets the working directory to this file's location, so a
+# path relative to the project root works for both knit and interactive runs.
+data_path <- file.path("data", "oreopoulos-resume-study-replication-data-file.dta")
+if (!file.exists(data_path)) {
+  stop("Data file not found. Expected it at: ", normalizePath(data_path, mustWork = FALSE))
+}
+df <- read_dta(data_path)
+
+# Recode type and fall_data as factors (mirrors Stata's `i.type i.fall_data`)
+df <- df %>%
+  mutate(
+    type      = factor(type),
+    fall_data = factor(fall_data)
+  )
+```
+
+# Table 4: Callback rates by resume type and ethnic origin
+
+Original Stata:
+
+```stata
+drop if accreditation==1 | reference==1 | legal==1
+reg callback i.type i.fall_data if name_ethnicity=="X" | name_ethnicity=="Canada", robust
+```
+
+run separately for each ethnicity, plus a pooled Indian/Pakistani/Chinese column.
+
+**On the sample filter.** In Stata, `drop if accreditation==1` treats missing
+values as *not* equal to 1 (so they are kept). In R, `filter(x != 1)` treats
+`NA != 1` as `NA`, which `filter()` silently drops --- this would incorrectly
+delete every row from the earlier sampling periods where these variables are
+missing (they were only introduced in the later wave). We replace `NA` with `0`
+first so the filter behaves the way the original Stata code actually does.
+
+```{r table4-sample}
+df4 <- df %>%
+  mutate(
+    accreditation = ifelse(is.na(accreditation), 0, accreditation),
+    reference     = ifelse(is.na(reference), 0, reference),
+    legal         = ifelse(is.na(legal), 0, legal)
+  ) %>%
+  filter(accreditation != 1, reference != 1, legal != 1)
+
+run_table4 <- function(data, ethnicities) {
+  sub <- data %>% filter(name_ethnicity %in% c(ethnicities, "Canada"))
+  lm_robust(callback ~ type + fall_data, data = sub, se_type = "HC1")
+}
+```
+
+```{r table4-fit}
+t4_indian    <- run_table4(df4, "Indian")
+t4_pakistani <- run_table4(df4, "Pakistani")
+t4_chinese   <- run_table4(df4, "Chinese")
+t4_chncdn    <- run_table4(df4, "Chn-Cdn")
+t4_british   <- run_table4(df4, "British")
+t4_greek     <- run_table4(df4, "Greek")
+t4_pooled    <- run_table4(df4, c("Indian", "Pakistani", "Chinese"))
+```
+
+## Indian vs. Canada
+
+```{r table4-indian}
+summary(t4_indian)
+```
+
+## Pakistani vs. Canada
+
+```{r table4-pakistani}
+summary(t4_pakistani)
+```
+
+## Chinese vs. Canada
+
+```{r table4-chinese}
+summary(t4_chinese)
+```
+
+## Chn-Cdn vs. Canada
+
+```{r table4-chncdn}
+summary(t4_chncdn)
+```
+
+## British vs. Canada
+
+```{r table4-british}
+summary(t4_british)
+```
+
+## Greek vs. Canada
+
+```{r table4-greek}
+summary(t4_greek)
+```
+
+## Pooled Indian/Pakistani/Chinese vs. Canada
+
+```{r table4-pooled}
+summary(t4_pooled)
+```
+
+# Table 5: Effects of offsetting resume characteristics
+
+Original Stata:
+
+```stata
+drop British, Chn-Cdn, Greek                       // keep Canada + Indian/Pakistani/Chinese
+replace missing same_exp/reference/accreditation/legal/extracurricular = 0
+(1) reg  callback i.type i.fall_data, robust
+(2) areg callback i.type, robust absorb(firmid)     // firm FIXED EFFECTS
+(3) reg  callback i.type [controls] i.fall_data, robust
+(4) areg callback i.type [controls], robust absorb(firmid)
+```
+
+then separate regressions of `callback ~ [controls] i.fall_data`, by `type`.
+
+```{r table5-sample}
+df5 <- df %>%
+  filter(!name_ethnicity %in% c("British", "Chn-Cdn", "Greek")) %>%
+  mutate(
+    same_exp               = ifelse(is.na(same_exp), 0, same_exp),
+    reference              = ifelse(is.na(reference), 0, reference),
+    accreditation          = ifelse(is.na(accreditation), 0, accreditation),
+    legal                  = ifelse(is.na(legal), 0, legal),
+    extracurricular_skills = ifelse(is.na(extracurricular_skills), 0, extracurricular_skills)
+  )
+
+controls_formula <- ~ female + ba_quality + extracurricular_skills + language_skills +
+                      ma + same_exp + exp_highquality + reference + accreditation + legal
+```
+
+## Panel A: pooled specifications
+
+```{r table5-panelA}
+# (1) Baseline, no controls, no firm FE
+t5_1 <- lm_robust(callback ~ type + fall_data, data = df5, se_type = "HC1")
+
+# (2) Firm fixed effects, no other controls
+#     lm_robust's `fixed_effects` argument replicates Stata's `areg ... absorb()`
+t5_2 <- lm_robust(callback ~ type, fixed_effects = ~ firmid, data = df5, se_type = "HC1")
+
+# (3) With full controls, no firm FE
+t5_3 <- lm_robust(
+  update.formula(controls_formula, callback ~ type + fall_data + .),
+  data = df5, se_type = "HC1"
+)
+
+# (4) With full controls AND firm fixed effects
+t5_4 <- lm_robust(
+  update.formula(controls_formula, callback ~ type + .),
+  fixed_effects = ~ firmid, data = df5, se_type = "HC1"
+)
+```
+
+### Col (1): baseline, no controls
+
+```{r table5-col1}
+summary(t5_1)
+```
+
+### Col (2): firm fixed effects
+
+```{r table5-col2}
+summary(t5_2)
+```
+
+### Col (3): with controls
+
+```{r table5-col3}
+summary(t5_3)
+```
+
+### Col (4): controls + firm fixed effects
+
+```{r table5-col4}
+summary(t5_4)
+```
+
+## Panel B: per-type breakdown of each characteristic's effect
+
+```{r table5-panelB-fn}
+run_table5_by_type <- function(data, type_val) {
+  sub <- data %>% filter(type == type_val)
+  if (type_val == 0) {
+    # Type 0 never has reference/accreditation/legal (structurally undefined)
+    lm_robust(callback ~ female + ba_quality + extracurricular_skills +
+                language_skills + ma + same_exp + exp_highquality + fall_data,
+              data = sub, se_type = "HC1")
+  } else {
+    lm_robust(callback ~ female + ba_quality + extracurricular_skills +
+                language_skills + ma + same_exp + exp_highquality +
+                reference + accreditation + legal + fall_data,
+              data = sub, se_type = "HC1")
+  }
+}
+```
+
+```{r table5-panelB}
+for (t in 0:4) {
+  cat(sprintf("\n===== Type %d =====\n", t))
+  print(summary(run_table5_by_type(df5, t)))
+}
+```
