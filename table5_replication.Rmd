@@ -1,0 +1,180 @@
+---
+title: "Oreopoulos (2011) Replication --- Table 5"
+author: "DSE4101 Immigrant Discrimination Project"
+date: "`r Sys.Date()`"
+output:
+  github_document:
+    toc: true
+---
+
+```{r knitr-opts, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE)
+```
+
+This document is a faithful R translation of the relevant section of the
+author's original Stata do-file
+(`oreopoulos-resume-study-replication-do-file.do`), covering **Table 5** only.
+See `table4_replication.Rmd` for Table 4.
+
+**Note on standard errors.** The original Stata code uses `robust`
+(heteroskedasticity-robust, Eicker-Huber-White) SEs throughout, and
+`absorb(firmid)` (firm fixed effects, *not* clustering) as an alternative
+specification. It does **not** use cluster-robust SEs anywhere. This script
+replicates that exactly. If your own extension analysis (interaction models,
+causal forest) clusters by `firmid` instead, that is a deliberate, defensible
+deviation --- just document it explicitly, since it differs from what the
+original paper did.
+
+# Setup
+
+```{r setup}
+# --- Package bootstrap: install anything missing, then load ------------------
+required_packages <- c("haven", "estimatr", "dplyr", "modelsummary")
+missing_packages  <- setdiff(required_packages, rownames(installed.packages()))
+if (length(missing_packages) > 0) {
+  install.packages(missing_packages, repos = "https://cloud.r-project.org")
+}
+library(haven)
+library(estimatr)     # lm_robust() for robust SEs and fixed effects
+library(dplyr)
+library(modelsummary)  # side-by-side regression tables
+
+# --- Load data -------------------------------------------------------------
+# When knitting, knitr sets the working directory to this file's location, so a
+# path relative to the project root works for both knit and interactive runs.
+data_path <- file.path("data", "oreopoulos-resume-study-replication-data-file.dta")
+if (!file.exists(data_path)) {
+  stop("Data file not found. Expected it at: ", normalizePath(data_path, mustWork = FALSE))
+}
+df <- read_dta(data_path)
+
+# Recode type and fall_data as factors (mirrors Stata's `i.type i.fall_data`)
+df <- df %>%
+  mutate(
+    type      = factor(type),
+    fall_data = factor(fall_data)
+  )
+```
+
+# Table 5: Effects of offsetting resume characteristics
+
+Original Stata:
+
+```stata
+drop British, Chn-Cdn, Greek                       // keep Canada + Indian/Pakistani/Chinese
+replace missing same_exp/reference/accreditation/legal/extracurricular = 0
+(1) reg  callback i.type i.fall_data, robust
+(2) areg callback i.type, robust absorb(firmid)     // firm FIXED EFFECTS
+(3) reg  callback i.type [controls] i.fall_data, robust
+(4) areg callback i.type [controls], robust absorb(firmid)
+```
+
+then separate regressions of `callback ~ [controls] i.fall_data`, by `type`.
+
+```{r table5-sample}
+df5 <- df %>%
+  filter(!name_ethnicity %in% c("British", "Chn-Cdn", "Greek")) %>%
+  mutate(
+    same_exp               = ifelse(is.na(same_exp), 0, same_exp),
+    reference              = ifelse(is.na(reference), 0, reference),
+    accreditation          = ifelse(is.na(accreditation), 0, accreditation),
+    legal                  = ifelse(is.na(legal), 0, legal),
+    extracurricular_skills = ifelse(is.na(extracurricular_skills), 0, extracurricular_skills)
+  )
+
+controls_formula <- ~ female + ba_quality + extracurricular_skills + language_skills +
+                      ma + same_exp + exp_highquality + reference + accreditation + legal
+```
+
+## Panel A: pooled specifications
+
+```{r table5-panelA-fit}
+# (1) Baseline, no controls, no firm FE
+t5_1 <- lm_robust(callback ~ type + fall_data, data = df5, se_type = "HC1")
+
+# (2) Firm fixed effects, no other controls
+#     lm_robust's `fixed_effects` argument replicates Stata's `areg ... absorb()`
+t5_2 <- lm_robust(callback ~ type, fixed_effects = ~ firmid, data = df5, se_type = "HC1")
+
+# (3) With full controls, no firm FE
+t5_3 <- lm_robust(
+  update.formula(controls_formula, callback ~ type + fall_data + .),
+  data = df5, se_type = "HC1"
+)
+
+# (4) With full controls AND firm fixed effects
+t5_4 <- lm_robust(
+  update.formula(controls_formula, callback ~ type + .),
+  fixed_effects = ~ firmid, data = df5, se_type = "HC1"
+)
+```
+
+### Combined table: columns (1)--(4)
+
+`fall_data` dummy coefficients are omitted; all `type` and control
+coefficients are shown so the offsetting-characteristics effects are visible
+directly.
+
+```{r table5-panelA-table, results = "asis"}
+modelsummary(
+  list(
+    "(1) No controls"        = t5_1,
+    "(2) Firm FE"             = t5_2,
+    "(3) Controls"            = t5_3,
+    "(4) Controls + Firm FE"  = t5_4
+  ),
+  stars    = TRUE,
+  coef_omit = "fall_data",
+  gof_omit  = "IC|Log|Adj|F|RMSE",
+  title     = "Table 5, Panel A: Effects of offsetting resume characteristics"
+)
+```
+
+## Panel B: per-type breakdown of each characteristic's effect
+
+Type 0 structurally never has `reference`, `accreditation`, or `legal`
+variation (those characteristics are undefined for that resume type), so its
+model omits those three terms; the combined table below will show blank cells
+for Type 0 on those rows rather than a coefficient.
+
+```{r table5-panelB-fn}
+run_table5_by_type <- function(data, type_val) {
+  sub <- data %>% filter(type == type_val)
+  if (type_val == 0) {
+    lm_robust(callback ~ female + ba_quality + extracurricular_skills +
+                language_skills + ma + same_exp + exp_highquality + fall_data,
+              data = sub, se_type = "HC1")
+  } else {
+    lm_robust(callback ~ female + ba_quality + extracurricular_skills +
+                language_skills + ma + same_exp + exp_highquality +
+                reference + accreditation + legal + fall_data,
+              data = sub, se_type = "HC1")
+  }
+}
+```
+
+```{r table5-panelB-fit}
+t5_type0 <- run_table5_by_type(df5, 0)
+t5_type1 <- run_table5_by_type(df5, 1)
+t5_type2 <- run_table5_by_type(df5, 2)
+t5_type3 <- run_table5_by_type(df5, 3)
+t5_type4 <- run_table5_by_type(df5, 4)
+```
+
+### Combined table: Type 0--4
+
+```{r table5-panelB-table, results = "asis"}
+modelsummary(
+  list(
+    "Type 0" = t5_type0,
+    "Type 1" = t5_type1,
+    "Type 2" = t5_type2,
+    "Type 3" = t5_type3,
+    "Type 4" = t5_type4
+  ),
+  stars    = TRUE,
+  coef_omit = "fall_data",
+  gof_omit  = "IC|Log|Adj|F|RMSE",
+  title     = "Table 5, Panel B: Per-type breakdown of characteristic effects"
+)
+```

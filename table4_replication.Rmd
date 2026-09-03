@@ -1,0 +1,123 @@
+---
+title: "Oreopoulos (2011) Replication --- Table 4"
+author: "DSE4101 Immigrant Discrimination Project"
+date: "`r Sys.Date()`"
+output:
+  github_document:
+    toc: true
+---
+
+```{r knitr-opts, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE)
+```
+
+This document is a faithful R translation of the relevant section of the
+author's original Stata do-file
+(`oreopoulos-resume-study-replication-do-file.do`), covering **Table 4** only.
+See `table5_replication.Rmd` for Table 5.
+
+**Note on standard errors.** The original Stata code uses `robust`
+(heteroskedasticity-robust, Eicker-Huber-White) SEs throughout. It does **not**
+use cluster-robust SEs anywhere. This script replicates that exactly. If your
+own extension analysis (interaction models, causal forest) clusters by
+`firmid` instead, that is a deliberate, defensible deviation --- just document
+it explicitly, since it differs from what the original paper did.
+
+# Setup
+
+```{r setup}
+# --- Package bootstrap: install anything missing, then load ------------------
+required_packages <- c("haven", "estimatr", "dplyr", "modelsummary")
+missing_packages  <- setdiff(required_packages, rownames(installed.packages()))
+if (length(missing_packages) > 0) {
+  install.packages(missing_packages, repos = "https://cloud.r-project.org")
+}
+library(haven)
+library(estimatr)     # lm_robust() for robust SEs and fixed effects
+library(dplyr)
+library(modelsummary)  # side-by-side regression tables
+
+# --- Load data -------------------------------------------------------------
+# When knitting, knitr sets the working directory to this file's location, so a
+# path relative to the project root works for both knit and interactive runs.
+data_path <- file.path("data", "oreopoulos-resume-study-replication-data-file.dta")
+if (!file.exists(data_path)) {
+  stop("Data file not found. Expected it at: ", normalizePath(data_path, mustWork = FALSE))
+}
+df <- read_dta(data_path)
+
+# Recode type and fall_data as factors (mirrors Stata's `i.type i.fall_data`)
+df <- df %>%
+  mutate(
+    type      = factor(type),
+    fall_data = factor(fall_data)
+  )
+```
+
+# Table 4: Callback rates by resume type and ethnic origin
+
+Original Stata:
+
+```stata
+drop if accreditation==1 | reference==1 | legal==1
+reg callback i.type i.fall_data if name_ethnicity=="X" | name_ethnicity=="Canada", robust
+```
+
+run separately for each ethnicity, plus a pooled Indian/Pakistani/Chinese column.
+
+**On the sample filter.** In Stata, `drop if accreditation==1` treats missing
+values as *not* equal to 1 (so they are kept). In R, `filter(x != 1)` treats
+`NA != 1` as `NA`, which `filter()` silently drops --- this would incorrectly
+delete every row from the earlier sampling periods where these variables are
+missing (they were only introduced in the later wave). We replace `NA` with `0`
+first so the filter behaves the way the original Stata code actually does.
+
+```{r table4-sample}
+df4 <- df %>%
+  mutate(
+    accreditation = ifelse(is.na(accreditation), 0, accreditation),
+    reference     = ifelse(is.na(reference), 0, reference),
+    legal         = ifelse(is.na(legal), 0, legal)
+  ) %>%
+  filter(accreditation != 1, reference != 1, legal != 1)
+
+run_table4 <- function(data, ethnicities) {
+  sub <- data %>% filter(name_ethnicity %in% c(ethnicities, "Canada"))
+  lm_robust(callback ~ type + fall_data, data = sub, se_type = "HC1")
+}
+```
+
+```{r table4-fit}
+t4_indian    <- run_table4(df4, "Indian")
+t4_pakistani <- run_table4(df4, "Pakistani")
+t4_chinese   <- run_table4(df4, "Chinese")
+t4_chncdn    <- run_table4(df4, "Chn-Cdn")
+t4_british   <- run_table4(df4, "British")
+t4_greek     <- run_table4(df4, "Greek")
+t4_pooled    <- run_table4(df4, c("Indian", "Pakistani", "Chinese"))
+```
+
+## Combined table: callback rates by ethnic origin vs. Canada
+
+Each column is a separate regression of `callback` on resume `type` and
+`fall_data`, restricted to the named ethnicity plus the Canadian baseline.
+`fall_data` dummy coefficients are omitted from display since they are a
+sampling-wave control rather than a quantity of substantive interest here.
+
+```{r table4-table, results = "asis"}
+modelsummary(
+  list(
+    "Indian"    = t4_indian,
+    "Pakistani" = t4_pakistani,
+    "Chinese"   = t4_chinese,
+    "Chn-Cdn"   = t4_chncdn,
+    "British"   = t4_british,
+    "Greek"     = t4_greek,
+    "Pooled"    = t4_pooled
+  ),
+  stars    = TRUE,
+  coef_omit = "fall_data",
+  gof_omit  = "IC|Log|Adj|F|RMSE",
+  title     = "Table 4: Callback rates by resume type and ethnic origin"
+)
+```
