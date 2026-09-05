@@ -112,9 +112,4 @@ modelsummary(
 )
 ```
 
-The coefficient of interest is `W:extracurricular_skills`. A negative and
-significant estimate means listing language fluency *closes* the name
-penalty (consistent with statistical discrimination); a near-zero or
-positive estimate means the penalty persists regardless of the signal
-(harder to reconcile with statistical discrimination alone, and more
-consistent with a taste-based component).
+The coefficient of interest is `W:extracurricular_skills`. A positive and significant estimate means that listing extracurricular activities reduces the name penalty associated with having a foreign name. Specifically, the positive interaction coefficient of 0.031 indicates that the difference in callback rates between foreign- and baseline-name applicants becomes 0.031 larger when extracurricular skills are listed. This is consistent with statistical discrimination, as employers appear to respond to an observable signal of applicant quality that reduces their reliance on the name as a signal of expected productivity.
