@@ -1,0 +1,262 @@
+---
+title: "Pre-Specified Interaction Model 2 --- Gender x Education/Experience Signals"
+author: "DSE4101 Immigrant Discrimination Project"
+date: "`r Sys.Date()`"
+output:
+  github_document:
+    toc: true
+---
+
+```{r knitr-opts, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE)
+```
+
+
+**Base treatment (fixed across all interaction models in this series):**
+`W = 1(type == 1)` vs. `type == 0`, restricted to
+`name_ethnicity %in% c("Canada", "Chinese", "Indian", "Pakistani")`. Type 0 to
+Type 1 changes *only* the applicant's name --- education and work-experience
+origin are held at "Canadian" for both --- so `W` isolates the pure name
+effect, uncontaminated by the foreign-credential confounds present in Types
+2--4. This is narrower than the Type 0--4 comparison used in the Table 4/5
+baseline replication, and matches TC's instruction to restrict the causal
+forest step to this cleaner contrast.
+
+**This model's moderator:** `female`, i.e. whether the resume carries a female
+name. We interact `female` with key education and experience signals
+(`ba_quality`, `exp_highquality`, `same_exp`, `ma`, `extracurricular_skills`,
+`language_skills`, `reference`, `accreditation`) to test whether returns to
+these resume characteristics differ by gender.
+
+This directly operationalizes mechanisms documented in the audit and
+discrimination literature:
+
+- **Gender × education quality (`female × ba_quality`)**  
+  Quadlin (2018, *ASR*) shows that high academic achievement pays off more for
+  men than for women, especially in male-typed fields; high-achieving women are
+  sometimes penalized on likability/fit dimensions despite strong credentials
+  [62][64][66]. This motivates expecting asymmetric returns to top-200 university
+  degrees by gender.
+
+- **Gender × experience quality (`female × exp_highquality`)**  
+  Audit and field-experiment evidence indicates that the value of experience is
+  gendered: in some contexts, men's experience is weighted more heavily, and
+  employers may use different criteria (competence vs. likability) when
+  evaluating equally experienced men and women [62][64][68]. Occupational
+  segregation further implies that the same “high-quality” experience may be
+  interpreted differently depending on gender [66][67][69].
+
+- **Gender × multinational / same-exp (`female × same_exp`)**  
+  Multinational-firm experience is a prestige signal that may interact with
+  gendered expectations about mobility, commitment, and fit. Meta-analytic and
+  audit evidence shows that gender bias is stronger in male-dominated contexts,
+  suggesting that cosmopolitan signals may not benefit women symmetrically
+  [66][67][69].
+
+- **Gender × Master's degree (`female × ma`)**  
+  Quadlin (2018) and related work imply that advanced degrees can signal
+  differently by gender: strong credentials can backfire for women if they
+  violate gendered expectations, especially in male-typed occupations
+  [62][64][66].
+
+- **Gender × extracurriculars, language, references, accreditation**  
+  These are additional productivity/fit signals. Gender-composition and
+  occupational-segregation findings suggest that any signal’s return can be
+  moderated by gender because employers evaluate “fit” through gendered lenses,
+  particularly in male- vs. female-dominated jobs [66][67][69][70].
+
+**On standard errors and clustering.**  
+The original Oreopoulos (2011) Stata code uses robust SEs only, never clustering.
+Our design sends multiple resumes to the same employer (typically ~4 per firm),
+so observations within `firmid` are not independent. We therefore:
+
+- Report **robust SEs** (HC1) to match the original approach.
+- Report **clustered SEs by `firmid`** (CR2) as our preferred specification,
+  following our group proposal and standard practice for audit studies with
+  within-firm randomization.
+
+Both are reported side by side so the deviation is explicit and auditable.
+
+# Setup
+
+```{r setup}
+required_packages <- c("haven", "estimatr", "dplyr", "modelsummary")
+missing_packages  <- setdiff(required_packages, rownames(installed.packages()))
+if (length(missing_packages) > 0) {
+  install.packages(missing_packages, repos = "https://cloud.r-project.org")
+}
+library(haven)
+library(estimatr)
+library(dplyr)
+library(modelsummary)
+
+data_path <- file.path("data", "oreopoulos-resume-study-replication-data-file.dta")
+if (!file.exists(data_path)) {
+  stop("Data file not found. Expected it at: ", normalizePath(data_path, mustWork = FALSE))
+}
+df <- read_dta(data_path)
+```
+
+# Sample construction
+
+```{r sample}
+df_int2 <- df %>%
+  filter(
+    type %in% c(0, 1),
+    name_ethnicity %in% c("Canada", "Chinese", "Indian", "Pakistani")
+  ) %>%
+  mutate(
+    W              = as.numeric(type == 1),   # 1 = foreign name (Type 1), 0 = Type 0 baseline
+    fall_data      = factor(fall_data),
+    # Recode moderators and controls; treat NA as 0 where structurally undefined
+    female                 = ifelse(is.na(female), 0, female),
+    ba_quality             = ifelse(is.na(ba_quality), 0, ba_quality),
+    extracurricular_skills = ifelse(is.na(extracurricular_skills), 0, extracurricular_skills),
+    ma                     = ifelse(is.na(ma), 0, ma),
+    same_exp               = ifelse(is.na(same_exp), 0, same_exp),
+    exp_highquality        = ifelse(is.na(exp_highquality), 0, exp_highquality),
+    language_skills        = ifelse(is.na(language_skills), 0, language_skills),
+    accreditation          = ifelse(is.na(accreditation), 0, accreditation),
+    reference              = ifelse(is.na(reference), 0, reference)
+  )
+
+cat("Analysis sample size:", nrow(df_int2), "\n")
+cat("Treatment (W) distribution:\n")
+print(table(df_int2$W))
+cat("Gender distribution:\n")
+print(table(df_int2$female))
+```
+
+# Model: `callback ~ female x (education/experience signals) + controls`
+
+We estimate a linear probability model with:
+
+- Main effects for `female` and key resume signals.
+- Two-way interactions between `female` and each signal.
+- Standard controls (including `W` and `fall_data`).
+
+The coefficients of interest are:
+
+- `female:ba_quality`  
+- `female:exp_highquality`  
+- `female:same_exp`  
+- `female:ma`  
+- `female:extracurricular_skills`  
+- `female:language_skills`  
+- `female:reference`  
+- `female:accreditation`  
+
+Negative and significant estimates would indicate that women benefit *less* than
+men from these signals, consistent with audit evidence on gendered returns to
+academic performance, experience, and occupational sorting [62][64][66][67][69][70].
+
+```{r fit}
+# (1) Robust SEs only -- matching Oreopoulos's original approach
+m_robust <- lm_robust(
+  callback ~ 
+    female * (
+      ba_quality +
+      exp_highquality +
+      same_exp +
+      ma +
+      extracurricular_skills +
+      language_skills +
+      reference +
+      accreditation
+    ) +
+    W + fall_data,
+  data = df_int2, se_type = "HC1"
+)
+
+# (2) Clustered by firmid -- preferred specification (multiple resumes per firm)
+m_clustered <- lm_robust(
+  callback ~ 
+    female * (
+      ba_quality +
+      exp_highquality +
+      same_exp +
+      ma +
+      extracurricular_skills +
+      language_skills +
+      reference +
+      accreditation
+    ) +
+    W + fall_data,
+  data = df_int2, clusters = firmid, se_type = "CR2"
+)
+```
+
+## Combined table
+
+```{r table, results = "asis"}
+modelsummary(
+  list(
+    "Robust SE (Oreopoulos-style)" = m_robust,
+    "Clustered by firm (proposal)"  = m_clustered
+  ),
+  stars    = TRUE,
+  coef_omit = "fall_data",
+  gof_omit  = "IC|Log|Adj|F|RMSE",
+  title     = "Interaction Model 2: Gender x Education/Experience Signals (Type 0 vs. Type 1)"
+)
+```
+
+## Interpretation guide
+
+Focus on the interaction terms:
+
+- **`female:ba_quality`**  
+  Tests whether the return to a top-200 university degree differs by gender.  
+  Quadlin (2018) and related audit work suggest high-achieving women may not
+  benefit as much as men from elite credentials, especially in male-typed
+  contexts [62][64][66].
+
+- **`female:exp_highquality`**  
+  Tests whether high-quality work experience yields symmetric returns by gender.  
+  Evidence on gendered evaluation of experience and occupational segregation
+  implies possible asymmetries [62][66][68][69].
+
+- **`female:same_exp`**  
+  Tests whether multinational-firm experience (same_exp) benefits women as much
+  as men. Given gendered fit perceptions and occupational sorting, we allow for
+  heterogeneous returns [66][67][69].
+
+- **`female:ma`**  
+  Tests whether a Canadian Master’s degree has different returns by gender.  
+  Quadlin (2018) shows advanced credentials can backfire for women if they
+  violate gendered expectations, supporting the hypothesis of asymmetric returns
+  [62][64][66].
+
+- **`female:extracurricular_skills`, `female:language_skills`,
+  `female:reference`, `female:accreditation`**  
+  These capture whether additional productivity/fit signals (activities,
+  language fluency, Canadian references, foreign-education accreditation) are
+  valued differently for women. Gender-composition and audit evidence suggest
+  that any such signal can be evaluated through gendered lenses, especially in
+  male- vs. female-dominated jobs [66][67][69][70].
+
+A **negative and significant** interaction coefficient means that the
+corresponding signal increases the callback probability *less* for women than
+for men (or possibly decreases it), consistent with gendered standards for
+competence, likability, and fit documented in the audit literature
+[62][64][66][67][69][70].
+
+---
+
+## Key references (for your write-up / bibliography)
+
+You can cite these in your paper when discussing this model:
+
+- Quadlin, N. (2018). “The Mark of a Woman’s Record: Gender and Academic
+  Performance in Hiring.” *American Sociological Review*, 83(2), 331–360.
+  [62][64][66]  
+- Birkelund, H., Coenders, M., Di Stasio, V., et al. (2023). “Gender composition
+  predicts gender bias: A meta-reanalysis of hiring discrimination audit
+  experiments.” *Science Advances*. [66][70]  
+- Muradova, S. (2021). “Gender Discrimination in Hiring: Evidence from an Audit
+  Experiment in Uzbekistan.” World Bank. [67]  
+- Additional audit and field-experiment evidence on gendered returns to
+  experience and occupational segregation [62][68][69][70].
+
+Replace these with your final BibTeX entries, but keep the mapping between each
+interaction term and the corresponding mechanism/paper as outlined above.
