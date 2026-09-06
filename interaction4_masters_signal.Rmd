@@ -1,0 +1,186 @@
+---
+title: "Pre-Specified Interaction Models --- Canadian Master's Degree x Resume Signals"
+author: "DSE4101 Immigrant Discrimination Project"
+date: "`r Sys.Date()`"
+output:
+  github_document:
+    toc: true
+---
+
+```{r knitr-opts, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE)
+```
+
+
+**Base treatment (fixed across all interaction models in this series):**  
+`T = 1(ma == 1)` vs. `ma == 0`, restricted to  
+`name_ethnicity %in% c("Canada", "Chinese", "Indian", "Pakistani")` and  
+`type %in% c(0, 1)`.  
+
+Here, `ma` indicates whether the applicant holds a Canadian master’s degree. By restricting to Types 0–1, we hold the name treatment constant within each ethnic group and avoid the additional foreign-credential confounds present in Types 2–4. This lets us isolate how the *Canadian graduate-education* signal interacts with other resume characteristics, without mixing in the pure name effect.
+
+**These models' moderators:**  
+We examine three interactions, each motivated by the literature on immigrant hiring, credential recognition, and signaling:
+
+1. `ma × ba_quality` (Top‑200 world university BA)  
+   - Question: Does a Canadian master’s complement or substitute for having a top‑200 BA?  
+   - Motivation: Canadian graduate education is especially valued (Ferrer, Picot, & Riddell, 2014; Ferris & Tedds, 2008). A top‑200 BA plus a Canadian MA could signal especially high ability (complementarity), or the MA could dominate the BA signal (substitution).
+
+2. `ma × same_exp` (Multinational firm experience)  
+   - Question: Is the Canadian master’s premium larger for applicants with experience at a multinational firm?  
+   - Motivation: Recognizable, high-status employers matter for immigrant hiring (Reitz, 2001; Banerjee & Reitz, 2016). Pairing a Canadian MA with multinational experience may signal “global” human capital, suggesting complementary returns under signaling models (Phelps, 1972; Aigner & Cain, 1977).
+
+3. `ma × accreditation` (Accreditation of foreign education)  
+   - Question: Does formal accreditation of foreign education interact with holding a Canadian master’s?  
+   - Motivation: Non-recognition of foreign credentials is a major barrier for immigrants (Reitz, 2001; Ferrer, Picot, & Riddell, 2014). Accreditation could either compensate for lack of a Canadian MA (larger effect when `ma = 0`) or be redundant for MA holders (smaller effect when `ma = 1`).
+
+**On standard errors.** The original Stata code uses `robust` SEs only, never clustering. Our own group proposal specifies clustering by `firmid` instead, since ~4 resumes are sent to each employer in most waves. All models below are estimated with `firmid`-clustered SEs (CR2) to reflect the resume–employer structure.
+
+# Setup
+
+```{r setup}
+required_packages <- c("haven", "estimatr", "dplyr", "modelsummary")
+missing_packages  <- setdiff(required_packages, rownames(installed.packages()))
+if (length(missing_packages) > 0) {
+  install.packages(missing_packages, repos = "https://cloud.r-project.org")
+}
+library(haven)
+library(estimatr)
+library(dplyr)
+library(modelsummary)
+
+data_path <- file.path("data", "oreopoulos-resume-study-replication-data-file.dta")
+if (!file.exists(data_path)) {
+  stop("Data file not found. Expected it at: ", normalizePath(data_path, mustWork = FALSE))
+}
+df <- read_dta(data_path)
+```
+
+# Sample construction
+
+```{r sample}
+df_ma_int <- df %>%
+  filter(
+    type %in% c(0, 1),
+    name_ethnicity %in% c("Canada", "Chinese", "Indian", "Pakistani")
+  ) %>%
+  mutate(
+    T                    = as.numeric(ma == 1),  # 1 = Canadian master's, 0 = no Canadian master's
+    fall_data            = factor(fall_data),
+    female               = ifelse(is.na(female), 0, female),
+    ba_quality           = ifelse(is.na(ba_quality), 0, ba_quality),
+    language_skills      = ifelse(is.na(language_skills), 0, language_skills),
+    ma                   = ifelse(is.na(ma), 0, ma),
+    same_exp             = ifelse(is.na(same_exp), 0, same_exp),
+    exp_highquality      = ifelse(is.na(exp_highquality), 0, exp_highquality),
+    extracurricular_skills = ifelse(is.na(extracurricular_skills), 0, extracurricular_skills),
+    reference            = ifelse(is.na(reference), 0, reference),
+    accreditation        = ifelse(is.na(accreditation), 0, accreditation),
+    legal                = ifelse(is.na(legal), 0, legal)
+  )
+
+cat("Analysis sample size:", nrow(df_ma_int), "\n")
+cat("Treatment (T = Canadian master's) distribution:\n")
+print(table(df_ma_int$T))
+```
+
+# Model 1: `callback ~ T * ba_quality + controls`
+
+```{r fit-ma-ba}
+m_ma_ba <- lm_robust(
+  callback ~ T * ba_quality + female + language_skills +
+             same_exp + exp_highquality + extracurricular_skills + fall_data,
+  data = df_ma_int,
+  clusters = firmid,
+  se_type = "CR2"
+)
+```
+
+## Table: Canadian Master's x Top-200 BA
+
+```{r table-ma-ba, results = "asis"}
+modelsummary(
+  list(
+    "Clustered by firmid" = m_ma_ba
+  ),
+  stars    = TRUE,
+  coef_omit = "fall_data",
+  gof_omit  = "IC|Log|Adj|F|RMSE",
+  title     = "Interaction Model 1: Canadian Master's x Top-200 BA"
+)
+```
+
+The coefficient of interest is `T:ba_quality`. A positive and significant estimate means that the callback premium associated with holding a Canadian master’s degree is larger for applicants whose BA is from a top‑200 university. This would be consistent with complementary returns to elite undergraduate education and Canadian graduate education, as both signals jointly indicate high ability (Ferrer, Picot, & Riddell, 2014; Ferris & Tedds, 2008). A negative or null interaction would suggest that the Canadian MA either substitutes for BA prestige or that the two signals do not reinforce each other.
+
+---
+
+# Model 2: `callback ~ T * same_exp + controls`
+
+```{r fit-ma-sameexp}
+m_ma_sameexp <- lm_robust(
+  callback ~ T * same_exp + female + ba_quality + language_skills +
+             exp_highquality + extracurricular_skills + fall_data,
+  data = df_ma_int,
+  clusters = firmid,
+  se_type = "CR2"
+)
+```
+
+## Table: Canadian Master's x Multinational Firm Experience
+
+```{r table-ma-sameexp, results = "asis"}
+modelsummary(
+  list(
+    "Clustered by firmid" = m_ma_sameexp
+  ),
+  stars    = TRUE,
+  coef_omit = "fall_data",
+  gof_omit  = "IC|Log|Adj|F|RMSE",
+  title     = "Interaction Model 2: Canadian Master's x Multinational Firm Experience"
+)
+```
+
+The coefficient of interest is `T:same_exp`. A positive and significant estimate implies that the Canadian master’s premium is larger for applicants with experience at a multinational firm. This is consistent with signaling and statistical-discrimination models (Phelps, 1972; Aigner & Cain, 1977): a Canadian MA combined with recognizable, high-status employer experience may signal “global” human capital and reduce employer uncertainty more than either signal alone. Empirical work on immigrant hiring in Canada emphasizes the importance of recognizable employers and Canadian education for labor-market success (Reitz, 2001; Banerjee & Reitz, 2016).
+
+---
+
+# Model 3: `callback ~ T * accreditation + controls`
+
+```{r fit-ma-accred}
+m_ma_accred <- lm_robust(
+  callback ~ T * accreditation + female + ba_quality + language_skills +
+             ma + same_exp + exp_highquality + extracurricular_skills + fall_data,
+  data = df_ma_int,
+  clusters = firmid,
+  se_type = "CR2"
+)
+```
+
+## Table: Canadian Master's x Accreditation of Foreign Education
+
+```{r table-ma-accred, results = "asis"}
+modelsummary(
+  list(
+    "Clustered by firmid" = m_ma_accred
+  ),
+  stars    = TRUE,
+  coef_omit = "fall_data",
+  gof_omit  = "IC|Log|Adj|F|RMSE",
+  title     = "Interaction Model 3: Canadian Master's x Accreditation"
+)
+```
+
+The coefficient of interest is `T:accreditation`. This tests whether the effect of holding a Canadian master’s degree depends on whether the applicant’s foreign education is formally accredited. A negative interaction would suggest that accreditation matters more for applicants *without* a Canadian MA (compensatory signal), while a positive interaction would imply that accreditation and a Canadian MA reinforce each other. This relates to evidence that non-recognition of foreign credentials is a major barrier for immigrants, and that formal accreditation can reduce uncertainty about foreign education quality (Reitz, 2001; Ferrer, Picot, & Riddell, 2014).
+
+---
+
+## References (suggested core list)
+
+- Aigner, D. J., & Cain, G. G. (1977). Statistical Theories of Discrimination in Labor Markets. *Industrial and Labor Relations Review, 30*(2), 175–187.  
+- Banerjee, R., & Reitz, J. G. (2016). Occupational Matching and the Underemployment of Immigrants in Canada. *Canadian Review of Sociology, 53*(2), 215–241.  
+- Ferrer, A. M., Picot, G., & Riddell, W. C. (2014). New Directions for Immigration Policy in Canada. *Canadian Public Policy / Analyse de Politiques, 40*(1), 1–17.  
+- Ferris, J. S., & Tedds, R. (2008). The Canadian Experience Class: A New Approach to Selecting Skilled Immigrants. *Canadian Public Policy / Analyse de Politiques, 34*(2), 197–214.  
+- Phelps, E. S. (1972). The Statistical Theory of Racism and Sexism. *American Economic Review, 62*(4), 659–661.  
+- Reitz, J. G. (2001). Immigrant Skill Utilization in the Canadian Labour Market: Implications of Human Capital Research. *Journal of International Migration and Integration, 2*(1), 1–46.  
+
+You can adapt the reference style to match your course requirements. If you prefer a different main treatment (e.g., `same_exp` or `accreditation`) instead of `ma`, I can generate the same three-interaction structure for that variable.
