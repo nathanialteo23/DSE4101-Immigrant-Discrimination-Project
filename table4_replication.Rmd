@@ -1,5 +1,5 @@
 ---
-title: "Oreopoulos (2011) Replication --- Table 4"
+title: "Oreopoulos (2011) Replication: Table 4"
 author: "DSE4101 Immigrant Discrimination Project"
 date: "`r Sys.Date()`"
 output:
@@ -11,42 +11,25 @@ output:
 knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE)
 ```
 
-This document is a faithful R translation of the relevant section of the
-author's original Stata do-file
-(`oreopoulos-resume-study-replication-do-file.do`), covering **Table 4** only.
-See `table5_replication.Rmd` for Table 5.
-
-**Note on standard errors.** The original Stata code uses `robust`
-(heteroskedasticity-robust, Eicker-Huber-White) SEs throughout. It does **not**
-use cluster-robust SEs anywhere. This script replicates that exactly. If your
-own extension analysis (interaction models, causal forest) clusters by
-`firmid` instead, that is a deliberate, defensible deviation --- just document
-it explicitly, since it differs from what the original paper did.
-
 # Setup
 
 ```{r setup}
-# --- Package bootstrap: install anything missing, then load ------------------
+
 required_packages <- c("haven", "estimatr", "dplyr", "modelsummary")
 missing_packages  <- setdiff(required_packages, rownames(installed.packages()))
 if (length(missing_packages) > 0) {
   install.packages(missing_packages, repos = "https://cloud.r-project.org")
 }
 library(haven)
-library(estimatr)     # lm_robust() for robust SEs and fixed effects
+library(estimatr)    
 library(dplyr)
 library(modelsummary)  # side-by-side regression tables
-
-# --- Load data -------------------------------------------------------------
-# When knitting, knitr sets the working directory to this file's location, so a
-# path relative to the project root works for both knit and interactive runs.
 data_path <- file.path("data", "oreopoulos-resume-study-replication-data-file.dta")
 if (!file.exists(data_path)) {
   stop("Data file not found. Expected it at: ", normalizePath(data_path, mustWork = FALSE))
 }
 df <- read_dta(data_path)
 
-# Recode type and fall_data as factors (mirrors Stata's `i.type i.fall_data`)
 df <- df %>%
   mutate(
     type      = factor(type),
@@ -64,13 +47,6 @@ reg callback i.type i.fall_data if name_ethnicity=="X" | name_ethnicity=="Canada
 ```
 
 run separately for each ethnicity, plus a pooled Indian/Pakistani/Chinese column.
-
-**On the sample filter.** In Stata, `drop if accreditation==1` treats missing
-values as *not* equal to 1 (so they are kept). In R, `filter(x != 1)` treats
-`NA != 1` as `NA`, which `filter()` silently drops --- this would incorrectly
-delete every row from the earlier sampling periods where these variables are
-missing (they were only introduced in the later wave). We replace `NA` with `0`
-first so the filter behaves the way the original Stata code actually does.
 
 ```{r table4-sample}
 df4 <- df %>%

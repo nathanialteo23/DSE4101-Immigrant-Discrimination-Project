@@ -11,24 +11,11 @@ output:
 knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE)
 ```
 
-This document is a faithful R translation of the relevant section of the
-author's original Stata do-file
-(`oreopoulos-resume-study-replication-do-file.do`), covering **Table 5** only.
-See `table4_replication.Rmd` for Table 4.
-
-**Note on standard errors.** The original Stata code uses `robust`
-(heteroskedasticity-robust, Eicker-Huber-White) SEs throughout, and
-`absorb(firmid)` (firm fixed effects, *not* clustering) as an alternative
-specification. It does **not** use cluster-robust SEs anywhere. This script
-replicates that exactly. If your own extension analysis (interaction models,
-causal forest) clusters by `firmid` instead, that is a deliberate, defensible
-deviation --- just document it explicitly, since it differs from what the
-original paper did.
 
 # Setup
 
 ```{r setup}
-# --- Package bootstrap: install anything missing, then load ------------------
+
 required_packages <- c("haven", "estimatr", "dplyr", "modelsummary")
 missing_packages  <- setdiff(required_packages, rownames(installed.packages()))
 if (length(missing_packages) > 0) {
@@ -39,16 +26,12 @@ library(estimatr)     # lm_robust() for robust SEs and fixed effects
 library(dplyr)
 library(modelsummary)  # side-by-side regression tables
 
-# --- Load data -------------------------------------------------------------
-# When knitting, knitr sets the working directory to this file's location, so a
-# path relative to the project root works for both knit and interactive runs.
 data_path <- file.path("data", "oreopoulos-resume-study-replication-data-file.dta")
 if (!file.exists(data_path)) {
   stop("Data file not found. Expected it at: ", normalizePath(data_path, mustWork = FALSE))
 }
 df <- read_dta(data_path)
 
-# Recode type and fall_data as factors (mirrors Stata's `i.type i.fall_data`)
 df <- df %>%
   mutate(
     type      = factor(type),
