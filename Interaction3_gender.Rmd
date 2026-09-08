@@ -83,7 +83,7 @@ Both are reported side by side so the deviation is explicit and auditable.
 required_packages <- c("haven", "estimatr", "dplyr", "modelsummary")
 missing_packages  <- setdiff(required_packages, rownames(installed.packages()))
 if (length(missing_packages) > 0) {
-  install.packages(missing_packages, repos = "https://cloud.r-project.org")
+  install.packages(missing_packages, repos = "[https://cloud.r-project.org](https://cloud.r-project.org)")
 }
 library(haven)
 library(estimatr)
@@ -127,32 +127,61 @@ cat("Gender distribution:\n")
 print(table(df_int2$female))
 ```
 
-# Model: `callback ~ female x (education/experience signals) + controls`
+# Model A: `callback ~ female × type + all other controls (main effects only)`
 
-We estimate a linear probability model with:
+We first estimate a parsimonious interaction model focusing on whether the effect of having a foreign name (Type 1 vs. Type 0) differs by gender, while still controlling for all other resume characteristics as main effects.
 
-- Main effects for `female` and key resume signals.
-- Two-way interactions between `female` and each signal.
-- Standard controls (including `W` and `fall_data`).
+```{r fit-mA}
+# (1) Robust SEs only
+mA_robust <- lm_robust(
+  callback ~ female * W +
+    ba_quality + exp_highquality + same_exp + ma +
+    extracurricular_skills + language_skills + reference + accreditation +
+    fall_data,
+  data = df_int2, se_type = "HC1"
+)
 
-The coefficients of interest are:
+# (2) Clustered by firmid
+mA_clustered <- lm_robust(
+  callback ~ female * W +
+    ba_quality + exp_highquality + same_exp + ma +
+    extracurricular_skills + language_skills + reference + accreditation +
+    fall_data,
+  data = df_int2, clusters = firmid, se_type = "CR2"
+)
+```
 
-- `female:ba_quality`  
-- `female:exp_highquality`  
-- `female:same_exp`  
-- `female:ma`  
-- `female:extracurricular_skills`  
-- `female:language_skills`  
-- `female:reference`  
-- `female:accreditation`  
+## Table: Model A (female × type)
 
-Negative and significant estimates would indicate that women benefit *less* than
-men from these signals, consistent with audit evidence on gendered returns to
-academic performance, experience, and occupational sorting [62][64][66][67][69][70].
+```{r table-mA, results = "asis"}
+modelsummary(
+  list(
+    "Robust SE (Oreopoulos-style)" = mA_robust,
+    "Clustered by firm (proposal)"  = mA_clustered
+  ),
+  stars    = TRUE,
+  coef_omit = "fall_data",
+  gof_omit  = "IC|Log|Adj|F|RMSE",
+  title     = "Model A: Gender × Type (Foreign Name) Interaction"
+)
+```
 
-```{r fit}
-# (1) Robust SEs only -- matching Oreopoulos's original approach
-m_robust <- lm_robust(
+**Coefficient of interest:** `female:W`  
+- A **negative and significant** estimate implies that the foreign-name penalty (Type 1 vs. Type 0) is larger for women than for men, consistent with intersectional or compounded disadvantages for foreign-named women (Oreopoulos, 2011; Quillian et al., 2017).  
+- A **positive and significant** estimate would imply that the foreign-name penalty is smaller for women (or that foreign-named women are relatively favored compared to foreign-named men).  
+- A **null** estimate would suggest that the name effect is similar across genders.
+
+All other resume signals (`ba_quality`, `exp_highquality`, `same_exp`, `ma`, etc.) are included as **controls only** (no interactions) in this model.
+
+---
+
+# Model B: `callback ~ female × (education/experience signals) + type + controls`
+
+We now estimate the richer specification that allows the return to education and experience signals to vary by gender. Here, `type` (i.e., `W`) is included as a main effect only.
+
+```{r fit-mB}
+# (1) Robust SEs only
+mB_robust <- lm_robust(
   callback ~ 
     female * (
       ba_quality +
@@ -168,8 +197,8 @@ m_robust <- lm_robust(
   data = df_int2, se_type = "HC1"
 )
 
-# (2) Clustered by firmid -- preferred specification (multiple resumes per firm)
-m_clustered <- lm_robust(
+# (2) Clustered by firmid
+mB_clustered <- lm_robust(
   callback ~ 
     female * (
       ba_quality +
@@ -186,22 +215,22 @@ m_clustered <- lm_robust(
 )
 ```
 
-## Combined table
+## Table: Model B (female × education/experience signals)
 
-```{r table, results = "asis"}
+```{r table-mB, results = "asis"}
 modelsummary(
   list(
-    "Robust SE (Oreopoulos-style)" = m_robust,
-    "Clustered by firm (proposal)"  = m_clustered
+    "Robust SE (Oreopoulos-style)" = mB_robust,
+    "Clustered by firm (proposal)"  = mB_clustered
   ),
   stars    = TRUE,
   coef_omit = "fall_data",
   gof_omit  = "IC|Log|Adj|F|RMSE",
-  title     = "Interaction Model 2: Gender x Education/Experience Signals (Type 0 vs. Type 1)"
+  title     = "Model B: Gender × Education/Experience Signals"
 )
 ```
 
-## Interpretation guide
+## Interpretation guide for Model B
 
 Focus on the interaction terms:
 
