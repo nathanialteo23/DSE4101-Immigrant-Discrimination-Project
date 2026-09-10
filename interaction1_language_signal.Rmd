@@ -87,15 +87,15 @@ print(table(df_int1$W))
 ```{r fit}
 # (1) Robust SEs only -- matching Oreopoulos's original approach
 m_robust <- lm_robust(
-  callback ~ W * language_skills + female + ba_quality + extracurricular_skills +
-             ma + same_exp + exp_highquality + fall_data,
+  callback ~ W + language_skills + W:language_skills + female + ba_quality +
+           extracurricular_skills + ma + same_exp + exp_highquality + fall_data,
   data = df_int1, se_type = "HC1"
 )
 
 # (2) Clustered by firmid
 m_clustered <- lm_robust(
-  callback ~ W * language_skills + female + ba_quality + extracurricular_skills +
-             ma + same_exp + exp_highquality + fall_data,
+  callback ~ W + language_skills + W:language_skills + female + ba_quality +
+             extracurricular_skills + ma + same_exp + exp_highquality + fall_data,
   data = df_int1, clusters = firmid, se_type = "CR2"
 )
 ```
