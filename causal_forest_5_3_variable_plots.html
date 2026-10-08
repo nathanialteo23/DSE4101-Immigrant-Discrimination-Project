@@ -1,0 +1,865 @@
+<!DOCTYPE html>
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+
+<head>
+
+<meta charset="utf-8">
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+<meta name="generator" content="pandoc" />
+<meta name="viewport" content="width=device-width, initial-scale=1">
+
+<style type="text/css">
+@font-face {
+font-family: octicons-link;
+src: url(data:font/woff;charset=utf-8;base64,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) format('woff');
+}
+body {
+-webkit-text-size-adjust: 100%;
+text-size-adjust: 100%;
+color: #333;
+font-family: "Helvetica Neue", Helvetica, "Segoe UI", Arial, freesans, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol";
+font-size: 16px;
+line-height: 1.6;
+word-wrap: break-word;
+}
+a {
+background-color: transparent;
+}
+a:active,
+a:hover {
+outline: 0;
+}
+strong {
+font-weight: bold;
+}
+h1 {
+font-size: 2em;
+margin: 0.67em 0;
+}
+img {
+border: 0;
+}
+hr {
+box-sizing: content-box;
+height: 0;
+}
+pre {
+overflow: auto;
+}
+code,
+kbd,
+pre {
+font-family: monospace, monospace;
+font-size: 1em;
+}
+input {
+color: inherit;
+font: inherit;
+margin: 0;
+}
+html input[disabled] {
+cursor: default;
+}
+input {
+line-height: normal;
+}
+input[type="checkbox"] {
+box-sizing: border-box;
+padding: 0;
+}
+table {
+border-collapse: collapse;
+border-spacing: 0;
+}
+td,
+th {
+padding: 0;
+}
+* {
+box-sizing: border-box;
+}
+input {
+font: 13px / 1.4 Helvetica, arial, nimbussansl, liberationsans, freesans, clean, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol";
+}
+a {
+color: #4078c0;
+text-decoration: none;
+}
+a:hover,
+a:active {
+text-decoration: underline;
+}
+hr {
+height: 0;
+margin: 15px 0;
+overflow: hidden;
+background: transparent;
+border: 0;
+border-bottom: 1px solid #ddd;
+}
+hr:before {
+display: table;
+content: "";
+}
+hr:after {
+display: table;
+clear: both;
+content: "";
+}
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+margin-top: 15px;
+margin-bottom: 15px;
+line-height: 1.1;
+}
+h1 {
+font-size: 30px;
+}
+h2 {
+font-size: 21px;
+}
+h3 {
+font-size: 16px;
+}
+h4 {
+font-size: 14px;
+}
+h5 {
+font-size: 12px;
+}
+h6 {
+font-size: 11px;
+}
+blockquote {
+margin: 0;
+}
+ul,
+ol {
+padding: 0;
+margin-top: 0;
+margin-bottom: 0;
+}
+ol ol,
+ul ol {
+list-style-type: lower-roman;
+}
+ul ul ol,
+ul ol ol,
+ol ul ol,
+ol ol ol {
+list-style-type: lower-alpha;
+}
+dd {
+margin-left: 0;
+}
+code {
+font-family: Consolas, "Liberation Mono", Menlo, Courier, monospace;
+font-size: 12px;
+}
+pre {
+margin-top: 0;
+margin-bottom: 0;
+font: 12px Consolas, "Liberation Mono", Menlo, Courier, monospace;
+}
+.select::-ms-expand {
+opacity: 0;
+}
+.octicon {
+font: normal normal normal 16px/1 octicons-link;
+display: inline-block;
+text-decoration: none;
+text-rendering: auto;
+-webkit-font-smoothing: antialiased;
+-moz-osx-font-smoothing: grayscale;
+-webkit-user-select: none;
+-moz-user-select: none;
+-ms-user-select: none;
+user-select: none;
+}
+.octicon-link:before {
+content: '\f05c';
+}
+.markdown-body:before {
+display: table;
+content: "";
+}
+.markdown-body:after {
+display: table;
+clear: both;
+content: "";
+}
+.markdown-body>*:first-child {
+margin-top: 0 !important;
+}
+.markdown-body>*:last-child {
+margin-bottom: 0 !important;
+}
+a:not([href]) {
+color: inherit;
+text-decoration: none;
+}
+.anchor {
+display: inline-block;
+padding-right: 2px;
+margin-left: -18px;
+}
+.anchor:focus {
+outline: none;
+}
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+margin-top: 1em;
+margin-bottom: 16px;
+font-weight: bold;
+line-height: 1.4;
+}
+h1 .octicon-link,
+h2 .octicon-link,
+h3 .octicon-link,
+h4 .octicon-link,
+h5 .octicon-link,
+h6 .octicon-link {
+color: #000;
+vertical-align: middle;
+visibility: hidden;
+}
+h1:hover .anchor,
+h2:hover .anchor,
+h3:hover .anchor,
+h4:hover .anchor,
+h5:hover .anchor,
+h6:hover .anchor {
+text-decoration: none;
+}
+h1:hover .anchor .octicon-link,
+h2:hover .anchor .octicon-link,
+h3:hover .anchor .octicon-link,
+h4:hover .anchor .octicon-link,
+h5:hover .anchor .octicon-link,
+h6:hover .anchor .octicon-link {
+visibility: visible;
+}
+h1 {
+padding-bottom: 0.3em;
+font-size: 2.25em;
+line-height: 1.2;
+border-bottom: 1px solid #eee;
+}
+h1 .anchor {
+line-height: 1;
+}
+h2 {
+padding-bottom: 0.3em;
+font-size: 1.75em;
+line-height: 1.225;
+border-bottom: 1px solid #eee;
+}
+h2 .anchor {
+line-height: 1;
+}
+h3 {
+font-size: 1.5em;
+line-height: 1.43;
+}
+h3 .anchor {
+line-height: 1.2;
+}
+h4 {
+font-size: 1.25em;
+}
+h4 .anchor {
+line-height: 1.2;
+}
+h5 {
+font-size: 1em;
+}
+h5 .anchor {
+line-height: 1.1;
+}
+h6 {
+font-size: 1em;
+color: #777;
+}
+h6 .anchor {
+line-height: 1.1;
+}
+p,
+blockquote,
+ul,
+ol,
+dl,
+table,
+pre {
+margin-top: 0;
+margin-bottom: 16px;
+}
+hr {
+height: 4px;
+padding: 0;
+margin: 16px 0;
+background-color: #e7e7e7;
+border: 0 none;
+}
+ul,
+ol {
+padding-left: 2em;
+}
+ul ul,
+ul ol,
+ol ol,
+ol ul {
+margin-top: 0;
+margin-bottom: 0;
+}
+li>p {
+margin-top: 16px;
+}
+dl {
+padding: 0;
+}
+dl dt {
+padding: 0;
+margin-top: 16px;
+font-size: 1em;
+font-style: italic;
+font-weight: bold;
+}
+dl dd {
+padding: 0 16px;
+margin-bottom: 16px;
+}
+blockquote {
+padding: 0 15px;
+color: #777;
+border-left: 4px solid #ddd;
+}
+blockquote>:first-child {
+margin-top: 0;
+}
+blockquote>:last-child {
+margin-bottom: 0;
+}
+table {
+display: block;
+width: 100%;
+overflow: auto;
+word-break: normal;
+word-break: keep-all;
+}
+table th {
+font-weight: bold;
+}
+table th,
+table td {
+padding: 6px 13px;
+border: 1px solid #ddd;
+}
+table tr {
+background-color: #fff;
+border-top: 1px solid #ccc;
+}
+table tr:nth-child(2n) {
+background-color: #f8f8f8;
+}
+img {
+max-width: 100%;
+box-sizing: content-box;
+background-color: #fff;
+}
+code {
+padding: 0;
+padding-top: 0.2em;
+padding-bottom: 0.2em;
+margin: 0;
+font-size: 85%;
+background-color: rgba(0,0,0,0.04);
+border-radius: 3px;
+}
+code:before,
+code:after {
+letter-spacing: -0.2em;
+content: "\00a0";
+}
+pre>code {
+padding: 0;
+margin: 0;
+font-size: 100%;
+word-break: normal;
+white-space: pre;
+background: transparent;
+border: 0;
+}
+.highlight {
+margin-bottom: 16px;
+}
+.highlight pre,
+pre {
+padding: 16px;
+overflow: auto;
+font-size: 85%;
+line-height: 1.45;
+background-color: #f7f7f7;
+border-radius: 3px;
+}
+.highlight pre {
+margin-bottom: 0;
+word-break: normal;
+}
+pre {
+word-wrap: normal;
+}
+pre code {
+display: inline;
+max-width: initial;
+padding: 0;
+margin: 0;
+overflow: initial;
+line-height: inherit;
+word-wrap: normal;
+background-color: transparent;
+border: 0;
+}
+pre code:before,
+pre code:after {
+content: normal;
+}
+kbd {
+display: inline-block;
+padding: 3px 5px;
+font-size: 11px;
+line-height: 10px;
+color: #555;
+vertical-align: middle;
+background-color: #fcfcfc;
+border: solid 1px #ccc;
+border-bottom-color: #bbb;
+border-radius: 3px;
+box-shadow: inset 0 -1px 0 #bbb;
+}
+.pl-c {
+color: #969896;
+}
+.pl-c1,
+.pl-s .pl-v {
+color: #0086b3;
+}
+.pl-e,
+.pl-en {
+color: #795da3;
+}
+.pl-s .pl-s1,
+.pl-smi {
+color: #333;
+}
+.pl-ent {
+color: #63a35c;
+}
+.pl-k {
+color: #a71d5d;
+}
+.pl-pds,
+.pl-s,
+.pl-s .pl-pse .pl-s1,
+.pl-sr,
+.pl-sr .pl-cce,
+.pl-sr .pl-sra,
+.pl-sr .pl-sre {
+color: #183691;
+}
+.pl-v {
+color: #ed6a43;
+}
+.pl-id {
+color: #b52a1d;
+}
+.pl-ii {
+background-color: #b52a1d;
+color: #f8f8f8;
+}
+.pl-sr .pl-cce {
+color: #63a35c;
+font-weight: bold;
+}
+.pl-ml {
+color: #693a17;
+}
+.pl-mh,
+.pl-mh .pl-en,
+.pl-ms {
+color: #1d3e81;
+font-weight: bold;
+}
+.pl-mq {
+color: #008080;
+}
+.pl-mi {
+color: #333;
+font-style: italic;
+}
+.pl-mb {
+color: #333;
+font-weight: bold;
+}
+.pl-md {
+background-color: #ffecec;
+color: #bd2c00;
+}
+.pl-mi1 {
+background-color: #eaffea;
+color: #55a532;
+}
+.pl-mdr {
+color: #795da3;
+font-weight: bold;
+}
+.pl-mo {
+color: #1d3e81;
+}
+kbd {
+display: inline-block;
+padding: 3px 5px;
+font: 11px Consolas, "Liberation Mono", Menlo, Courier, monospace;
+line-height: 10px;
+color: #555;
+vertical-align: middle;
+background-color: #fcfcfc;
+border: solid 1px #ccc;
+border-bottom-color: #bbb;
+border-radius: 3px;
+box-shadow: inset 0 -1px 0 #bbb;
+}
+.task-list-item {
+list-style-type: none;
+}
+.task-list-item+.task-list-item {
+margin-top: 3px;
+}
+.task-list-item input {
+margin: 0 0.35em 0.25em -1.6em;
+vertical-align: middle;
+}
+:checked+.radio-label {
+z-index: 1;
+position: relative;
+border-color: #4078c0;
+}
+.sourceLine {
+display: inline-block;
+}
+code .kw { color: #000000; }
+code .dt { color: #ed6a43; }
+code .dv { color: #009999; }
+code .bn { color: #009999; }
+code .fl { color: #009999; }
+code .ch { color: #009999; }
+code .st { color: #183691; }
+code .co { color: #969896; }
+code .ot { color: #0086b3; }
+code .al { color: #a61717; }
+code .fu { color: #63a35c; }
+code .er { color: #a61717; background-color: #e3d2d2; }
+code .wa { color: #000000; }
+code .cn { color: #008080; }
+code .sc { color: #008080; }
+code .vs { color: #183691; }
+code .ss { color: #183691; }
+code .im { color: #000000; }
+code .va {color: #008080; }
+code .cf { color: #000000; }
+code .op { color: #000000; }
+code .bu { color: #000000; }
+code .ex { color: #000000; }
+code .pp { color: #999999; }
+code .at { color: #008080; }
+code .do { color: #969896; }
+code .an { color: #008080; }
+code .cv { color: #008080; }
+code .in { color: #008080; }
+</style>
+<style>
+body {
+box-sizing: border-box;
+min-width: 200px;
+max-width: 980px;
+margin: 0 auto;
+padding: 45px;
+padding-top: 0px;
+}
+</style>
+
+
+</head>
+
+<body>
+
+<h1 id="causal-forest-presenting-cates-across-covariate-values-section-53-style">Causal
+Forest: Presenting CATEs Across Covariate Values (Section 5.3
+Style)</h1>
+<p>DSE4101 Digital Economy Group 1 2026-09-19</p>
+<ul>
+<li><a href="#setup">Setup</a></li>
+<li><a href="#sample-construction">Sample construction</a></li>
+<li><a href="#fitting-the-causal-forest">Fitting the causal
+forest</a></li>
+<li><a href="#step-1-is-there-real-heterogeneity-here-at-all">Step 1: is
+there real heterogeneity here at all?</a></li>
+<li><a href="#step-2-extract-per-observation-cate-estimates">Step 2:
+extract per-observation CATE estimates</a></li>
+<li><a href="#step-3-section-53-style--cates-across-each-covariate">Step
+3: Section 5.3 style – CATEs across each covariate</a></li>
+<li><a href="#step-4-statistical-backup--best-linear-projection">Step 4:
+statistical backup – Best Linear Projection</a></li>
+<li><a href="#step-5-spotlight-comparison-for-language_skills">Step 5:
+spotlight comparison for language_skills</a></li>
+</ul>
+<p>This script fits the restricted-treatment causal forest (Type 0
+vs. Type 1, Chinese/Indian/Pakistani/Canada – the same base treatment as
+<code>interaction1_language_signal.Rmd</code>), then presents its
+heterogeneity the way Rehill’s (2025) review describes as the most
+common approach in the literature (Section 5.3): plotting individual
+CATE estimates against each covariate. Since our covariates are binary,
+this takes the form of boxplots/group comparisons rather than a smoothed
+continuous curve.</p>
+<h1 id="setup">Setup</h1>
+<div class="sourceCode" id="cb1"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb1-1"><a href="#cb1-1" tabindex="-1"></a>required_packages <span class="ot">&lt;-</span> <span class="fu">c</span>(<span class="st">&quot;haven&quot;</span>, <span class="st">&quot;dplyr&quot;</span>, <span class="st">&quot;grf&quot;</span>, <span class="st">&quot;ggplot2&quot;</span>, <span class="st">&quot;tidyr&quot;</span>)</span>
+<span id="cb1-2"><a href="#cb1-2" tabindex="-1"></a>missing_packages  <span class="ot">&lt;-</span> <span class="fu">setdiff</span>(required_packages, <span class="fu">rownames</span>(<span class="fu">installed.packages</span>()))</span>
+<span id="cb1-3"><a href="#cb1-3" tabindex="-1"></a><span class="cf">if</span> (<span class="fu">length</span>(missing_packages) <span class="sc">&gt;</span> <span class="dv">0</span>) {</span>
+<span id="cb1-4"><a href="#cb1-4" tabindex="-1"></a>  <span class="fu">install.packages</span>(missing_packages, <span class="at">repos =</span> <span class="st">&quot;https://cloud.r-project.org&quot;</span>)</span>
+<span id="cb1-5"><a href="#cb1-5" tabindex="-1"></a>}</span>
+<span id="cb1-6"><a href="#cb1-6" tabindex="-1"></a><span class="fu">library</span>(haven)</span>
+<span id="cb1-7"><a href="#cb1-7" tabindex="-1"></a><span class="fu">library</span>(dplyr)</span>
+<span id="cb1-8"><a href="#cb1-8" tabindex="-1"></a><span class="fu">library</span>(grf)</span>
+<span id="cb1-9"><a href="#cb1-9" tabindex="-1"></a><span class="fu">library</span>(ggplot2)</span>
+<span id="cb1-10"><a href="#cb1-10" tabindex="-1"></a><span class="fu">library</span>(tidyr)</span>
+<span id="cb1-11"><a href="#cb1-11" tabindex="-1"></a></span>
+<span id="cb1-12"><a href="#cb1-12" tabindex="-1"></a>data_path <span class="ot">&lt;-</span> <span class="fu">file.path</span>(<span class="st">&quot;data&quot;</span>, <span class="st">&quot;oreopoulos-resume-study-replication-data-file.dta&quot;</span>)</span>
+<span id="cb1-13"><a href="#cb1-13" tabindex="-1"></a><span class="cf">if</span> (<span class="sc">!</span><span class="fu">file.exists</span>(data_path)) {</span>
+<span id="cb1-14"><a href="#cb1-14" tabindex="-1"></a>  <span class="fu">stop</span>(<span class="st">&quot;Data file not found. Expected it at: &quot;</span>, <span class="fu">normalizePath</span>(data_path, <span class="at">mustWork =</span> <span class="cn">FALSE</span>))</span>
+<span id="cb1-15"><a href="#cb1-15" tabindex="-1"></a>}</span>
+<span id="cb1-16"><a href="#cb1-16" tabindex="-1"></a>df <span class="ot">&lt;-</span> <span class="fu">read_dta</span>(data_path)</span>
+<span id="cb1-17"><a href="#cb1-17" tabindex="-1"></a></span>
+<span id="cb1-18"><a href="#cb1-18" tabindex="-1"></a><span class="co"># haven::read_dta() preserves Stata&#39;s variable/value labels as an extra</span></span>
+<span id="cb1-19"><a href="#cb1-19" tabindex="-1"></a><span class="co"># &quot;haven_labelled&quot; class on top of each numeric column. lm_robust() (used</span></span>
+<span id="cb1-20"><a href="#cb1-20" tabindex="-1"></a><span class="co"># elsewhere in this project) silently strips this when building its model</span></span>
+<span id="cb1-21"><a href="#cb1-21" tabindex="-1"></a><span class="co"># formula, but grf::causal_forest() does not -- its internal validation</span></span>
+<span id="cb1-22"><a href="#cb1-22" tabindex="-1"></a><span class="co"># calls is.vector() on Y and W, which returns FALSE for anything carrying</span></span>
+<span id="cb1-23"><a href="#cb1-23" tabindex="-1"></a><span class="co"># extra attributes, including haven_labelled. zap_labels() removes that</span></span>
+<span id="cb1-24"><a href="#cb1-24" tabindex="-1"></a><span class="co"># metadata so every column becomes a plain numeric vector.</span></span>
+<span id="cb1-25"><a href="#cb1-25" tabindex="-1"></a>df <span class="ot">&lt;-</span> haven<span class="sc">::</span><span class="fu">zap_labels</span>(df)</span></code></pre></div>
+<h1 id="sample-construction">Sample construction</h1>
+<p>Identical restriction to the interaction models: Type 0 vs. Type 1,
+restricted to Canada/Chinese/Indian/Pakistani names.
+<code>accreditation</code>, <code>legal</code>, and
+<code>reference</code> are dropped entirely from the covariate set –
+they are structurally constant (always 0) in this subsample, since those
+characteristics only exist for resumes claiming foreign credentials, and
+a zero-variance covariate cannot be split on.</p>
+<div class="sourceCode" id="cb2"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb2-1"><a href="#cb2-1" tabindex="-1"></a>df_cf <span class="ot">&lt;-</span> df <span class="sc">%&gt;%</span></span>
+<span id="cb2-2"><a href="#cb2-2" tabindex="-1"></a>  <span class="fu">filter</span>(</span>
+<span id="cb2-3"><a href="#cb2-3" tabindex="-1"></a>    type <span class="sc">%in%</span> <span class="fu">c</span>(<span class="dv">0</span>, <span class="dv">1</span>),</span>
+<span id="cb2-4"><a href="#cb2-4" tabindex="-1"></a>    name_ethnicity <span class="sc">%in%</span> <span class="fu">c</span>(<span class="st">&quot;Canada&quot;</span>, <span class="st">&quot;Chinese&quot;</span>, <span class="st">&quot;Indian&quot;</span>, <span class="st">&quot;Pakistani&quot;</span>)</span>
+<span id="cb2-5"><a href="#cb2-5" tabindex="-1"></a>  ) <span class="sc">%&gt;%</span></span>
+<span id="cb2-6"><a href="#cb2-6" tabindex="-1"></a>  <span class="fu">mutate</span>(</span>
+<span id="cb2-7"><a href="#cb2-7" tabindex="-1"></a>    <span class="at">W  =</span> <span class="fu">as.numeric</span>(type <span class="sc">==</span> <span class="dv">1</span>),</span>
+<span id="cb2-8"><a href="#cb2-8" tabindex="-1"></a>    <span class="at">Y  =</span> callback,</span>
+<span id="cb2-9"><a href="#cb2-9" tabindex="-1"></a>    <span class="at">female                 =</span> <span class="fu">ifelse</span>(<span class="fu">is.na</span>(female), <span class="dv">0</span>, female),</span>
+<span id="cb2-10"><a href="#cb2-10" tabindex="-1"></a>    <span class="at">ba_quality              =</span> <span class="fu">ifelse</span>(<span class="fu">is.na</span>(ba_quality), <span class="dv">0</span>, ba_quality),</span>
+<span id="cb2-11"><a href="#cb2-11" tabindex="-1"></a>    <span class="at">extracurricular_skills  =</span> <span class="fu">ifelse</span>(<span class="fu">is.na</span>(extracurricular_skills), <span class="dv">0</span>, extracurricular_skills),</span>
+<span id="cb2-12"><a href="#cb2-12" tabindex="-1"></a>    <span class="at">language_skills          =</span> <span class="fu">ifelse</span>(<span class="fu">is.na</span>(language_skills), <span class="dv">0</span>, language_skills),</span>
+<span id="cb2-13"><a href="#cb2-13" tabindex="-1"></a>    <span class="at">ma                      =</span> <span class="fu">ifelse</span>(<span class="fu">is.na</span>(ma), <span class="dv">0</span>, ma),</span>
+<span id="cb2-14"><a href="#cb2-14" tabindex="-1"></a>    <span class="at">same_exp                =</span> <span class="fu">ifelse</span>(<span class="fu">is.na</span>(same_exp), <span class="dv">0</span>, same_exp),</span>
+<span id="cb2-15"><a href="#cb2-15" tabindex="-1"></a>    <span class="at">exp_highquality         =</span> <span class="fu">ifelse</span>(<span class="fu">is.na</span>(exp_highquality), <span class="dv">0</span>, exp_highquality),</span>
+<span id="cb2-16"><a href="#cb2-16" tabindex="-1"></a>    <span class="at">fall_data               =</span> <span class="fu">as.numeric</span>(<span class="fu">as.factor</span>(fall_data))</span>
+<span id="cb2-17"><a href="#cb2-17" tabindex="-1"></a>  )</span>
+<span id="cb2-18"><a href="#cb2-18" tabindex="-1"></a></span>
+<span id="cb2-19"><a href="#cb2-19" tabindex="-1"></a>covariate_names <span class="ot">&lt;-</span> <span class="fu">c</span>(<span class="st">&quot;female&quot;</span>, <span class="st">&quot;ba_quality&quot;</span>, <span class="st">&quot;extracurricular_skills&quot;</span>,</span>
+<span id="cb2-20"><a href="#cb2-20" tabindex="-1"></a>                      <span class="st">&quot;language_skills&quot;</span>, <span class="st">&quot;ma&quot;</span>, <span class="st">&quot;same_exp&quot;</span>, <span class="st">&quot;exp_highquality&quot;</span>)</span>
+<span id="cb2-21"><a href="#cb2-21" tabindex="-1"></a></span>
+<span id="cb2-22"><a href="#cb2-22" tabindex="-1"></a><span class="co"># fall_data is included as a covariate to help the forest&#39;s internal Y.hat/W.hat</span></span>
+<span id="cb2-23"><a href="#cb2-23" tabindex="-1"></a><span class="co"># regressions, but is not one of the substantive covariates we plot CATEs against.</span></span>
+<span id="cb2-24"><a href="#cb2-24" tabindex="-1"></a><span class="co">#</span></span>
+<span id="cb2-25"><a href="#cb2-25" tabindex="-1"></a><span class="co"># X, Y, and W are explicitly coerced here rather than relying on zap_labels()</span></span>
+<span id="cb2-26"><a href="#cb2-26" tabindex="-1"></a><span class="co"># alone: haven columns can carry a *separate* singular &quot;label&quot; attribute (the</span></span>
+<span id="cb2-27"><a href="#cb2-27" tabindex="-1"></a><span class="co"># Stata variable description) in addition to the &quot;labels&quot; (value labels)</span></span>
+<span id="cb2-28"><a href="#cb2-28" tabindex="-1"></a><span class="co"># attribute that zap_labels() removes. is.vector() -- which grf&#39;s internal</span></span>
+<span id="cb2-29"><a href="#cb2-29" tabindex="-1"></a><span class="co"># validate_observations() uses -- returns FALSE if ANY attribute remains,</span></span>
+<span id="cb2-30"><a href="#cb2-30" tabindex="-1"></a><span class="co"># regardless of which one. as.numeric() and data.matrix() strip everything</span></span>
+<span id="cb2-31"><a href="#cb2-31" tabindex="-1"></a><span class="co"># unconditionally, guaranteeing plain vectors/matrix no matter what metadata</span></span>
+<span id="cb2-32"><a href="#cb2-32" tabindex="-1"></a><span class="co"># haven left behind.</span></span>
+<span id="cb2-33"><a href="#cb2-33" tabindex="-1"></a>X <span class="ot">&lt;-</span> <span class="fu">data.matrix</span>(df_cf[, <span class="fu">c</span>(covariate_names, <span class="st">&quot;fall_data&quot;</span>)])</span>
+<span id="cb2-34"><a href="#cb2-34" tabindex="-1"></a>Y <span class="ot">&lt;-</span> <span class="fu">as.numeric</span>(df_cf<span class="sc">$</span>Y)</span>
+<span id="cb2-35"><a href="#cb2-35" tabindex="-1"></a>W <span class="ot">&lt;-</span> <span class="fu">as.numeric</span>(df_cf<span class="sc">$</span>W)</span>
+<span id="cb2-36"><a href="#cb2-36" tabindex="-1"></a>clusters <span class="ot">&lt;-</span> <span class="fu">as.numeric</span>(<span class="fu">as.factor</span>(df_cf<span class="sc">$</span>firmid))</span>
+<span id="cb2-37"><a href="#cb2-37" tabindex="-1"></a></span>
+<span id="cb2-38"><a href="#cb2-38" tabindex="-1"></a><span class="co"># --- Diagnostics: run this chunk and share the printed output ---</span></span>
+<span id="cb2-39"><a href="#cb2-39" tabindex="-1"></a><span class="fu">cat</span>(<span class="st">&quot;class(Y):&quot;</span>, <span class="fu">class</span>(Y), <span class="st">&quot;</span><span class="sc">\n</span><span class="st">&quot;</span>)</span></code></pre></div>
+<pre><code>## class(Y): numeric</code></pre>
+<div class="sourceCode" id="cb4"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb4-1"><a href="#cb4-1" tabindex="-1"></a><span class="fu">cat</span>(<span class="st">&quot;is.vector(Y):&quot;</span>, <span class="fu">is.vector</span>(Y), <span class="st">&quot;</span><span class="sc">\n</span><span class="st">&quot;</span>)</span></code></pre></div>
+<pre><code>## is.vector(Y): TRUE</code></pre>
+<div class="sourceCode" id="cb6"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb6-1"><a href="#cb6-1" tabindex="-1"></a><span class="fu">cat</span>(<span class="st">&quot;length(Y):&quot;</span>, <span class="fu">length</span>(Y), <span class="st">&quot;</span><span class="sc">\n</span><span class="st">&quot;</span>)</span></code></pre></div>
+<pre><code>## length(Y): 5657</code></pre>
+<div class="sourceCode" id="cb8"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb8-1"><a href="#cb8-1" tabindex="-1"></a><span class="fu">cat</span>(<span class="st">&quot;attributes(Y):</span><span class="sc">\n</span><span class="st">&quot;</span>); <span class="fu">print</span>(<span class="fu">attributes</span>(Y))</span></code></pre></div>
+<pre><code>## attributes(Y):
+
+## NULL</code></pre>
+<div class="sourceCode" id="cb10"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb10-1"><a href="#cb10-1" tabindex="-1"></a><span class="fu">cat</span>(<span class="st">&quot;</span><span class="sc">\n</span><span class="st">class(W):&quot;</span>, <span class="fu">class</span>(W), <span class="st">&quot;</span><span class="sc">\n</span><span class="st">&quot;</span>)</span></code></pre></div>
+<pre><code>## 
+## class(W): numeric</code></pre>
+<div class="sourceCode" id="cb12"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb12-1"><a href="#cb12-1" tabindex="-1"></a><span class="fu">cat</span>(<span class="st">&quot;is.vector(W):&quot;</span>, <span class="fu">is.vector</span>(W), <span class="st">&quot;</span><span class="sc">\n</span><span class="st">&quot;</span>)</span></code></pre></div>
+<pre><code>## is.vector(W): TRUE</code></pre>
+<div class="sourceCode" id="cb14"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb14-1"><a href="#cb14-1" tabindex="-1"></a><span class="fu">cat</span>(<span class="st">&quot;length(W):&quot;</span>, <span class="fu">length</span>(W), <span class="st">&quot;</span><span class="sc">\n</span><span class="st">&quot;</span>)</span></code></pre></div>
+<pre><code>## length(W): 5657</code></pre>
+<div class="sourceCode" id="cb16"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb16-1"><a href="#cb16-1" tabindex="-1"></a><span class="fu">cat</span>(<span class="st">&quot;attributes(W):</span><span class="sc">\n</span><span class="st">&quot;</span>); <span class="fu">print</span>(<span class="fu">attributes</span>(W))</span></code></pre></div>
+<pre><code>## attributes(W):
+
+## NULL</code></pre>
+<div class="sourceCode" id="cb18"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb18-1"><a href="#cb18-1" tabindex="-1"></a><span class="fu">cat</span>(<span class="st">&quot;</span><span class="sc">\n</span><span class="st">class(X):&quot;</span>, <span class="fu">class</span>(X), <span class="st">&quot;</span><span class="sc">\n</span><span class="st">&quot;</span>)</span></code></pre></div>
+<pre><code>## 
+## class(X): matrix array</code></pre>
+<div class="sourceCode" id="cb20"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb20-1"><a href="#cb20-1" tabindex="-1"></a><span class="fu">cat</span>(<span class="st">&quot;dim(X):&quot;</span>, <span class="fu">dim</span>(X), <span class="st">&quot;</span><span class="sc">\n</span><span class="st">&quot;</span>)</span></code></pre></div>
+<pre><code>## dim(X): 5657 8</code></pre>
+<div class="sourceCode" id="cb22"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb22-1"><a href="#cb22-1" tabindex="-1"></a><span class="fu">cat</span>(<span class="st">&quot;nrow(df_cf):&quot;</span>, <span class="fu">nrow</span>(df_cf), <span class="st">&quot;</span><span class="sc">\n</span><span class="st">&quot;</span>)</span></code></pre></div>
+<pre><code>## nrow(df_cf): 5657</code></pre>
+<div class="sourceCode" id="cb24"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb24-1"><a href="#cb24-1" tabindex="-1"></a><span class="fu">cat</span>(<span class="st">&quot;Analysis sample size:&quot;</span>, <span class="fu">nrow</span>(df_cf), <span class="st">&quot;</span><span class="sc">\n</span><span class="st">&quot;</span>)</span></code></pre></div>
+<pre><code>## Analysis sample size: 5657</code></pre>
+<div class="sourceCode" id="cb26"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb26-1"><a href="#cb26-1" tabindex="-1"></a><span class="fu">cat</span>(<span class="st">&quot;Treatment (W) distribution:</span><span class="sc">\n</span><span class="st">&quot;</span>)</span></code></pre></div>
+<pre><code>## Treatment (W) distribution:</code></pre>
+<div class="sourceCode" id="cb28"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb28-1"><a href="#cb28-1" tabindex="-1"></a><span class="fu">print</span>(<span class="fu">table</span>(W))</span></code></pre></div>
+<pre><code>## W
+##    0    1 
+## 3026 2631</code></pre>
+<h1 id="fitting-the-causal-forest">Fitting the causal forest</h1>
+<p><code>clusters</code> is passed explicitly – the same reasoning as
+clustering the standard errors in the interaction models applies here:
+Type 0 and Type 1 resumes were sent to the same employer within the same
+short window, so resumes are not independent observations, and the
+forest needs to know that when estimating variance.</p>
+<div class="sourceCode" id="cb30"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb30-1"><a href="#cb30-1" tabindex="-1"></a>cf <span class="ot">&lt;-</span> <span class="fu">causal_forest</span>(</span>
+<span id="cb30-2"><a href="#cb30-2" tabindex="-1"></a>  <span class="at">X =</span> X,</span>
+<span id="cb30-3"><a href="#cb30-3" tabindex="-1"></a>  <span class="at">Y =</span> Y,</span>
+<span id="cb30-4"><a href="#cb30-4" tabindex="-1"></a>  <span class="at">W =</span> W,</span>
+<span id="cb30-5"><a href="#cb30-5" tabindex="-1"></a>  <span class="at">clusters =</span> clusters,</span>
+<span id="cb30-6"><a href="#cb30-6" tabindex="-1"></a>  <span class="at">honesty =</span> <span class="cn">TRUE</span></span>
+<span id="cb30-7"><a href="#cb30-7" tabindex="-1"></a>)</span></code></pre></div>
+<h1 id="step-1-is-there-real-heterogeneity-here-at-all">Step 1: is there
+real heterogeneity here at all?</h1>
+<p>Before looking at any covariate-specific plot, run the calibration
+test. The <code>differential.forest.prediction</code> coefficient is the
+one that matters – if it is not distinguishable from zero, the honest
+conclusion is that the forest did not find heterogeneity beyond the
+average effect, and the plots below should be read as exploratory rather
+than confirmatory.</p>
+<div class="sourceCode" id="cb31"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb31-1"><a href="#cb31-1" tabindex="-1"></a><span class="fu">test_calibration</span>(cf)</span></code></pre></div>
+<pre><code>## 
+## Best linear fit using forest predictions (on held-out data)
+## as well as the mean forest prediction as regressors, along
+## with one-sided heteroskedasticity-robust (HC3) SEs:
+## 
+##                                Estimate Std. Error t value    Pr(&gt;t)    
+## mean.forest.prediction         0.995903   0.156990  6.3437 1.208e-10 ***
+## differential.forest.prediction 0.090766   0.188439  0.4817     0.315    
+## ---
+## Signif. codes:  0 &#39;***&#39; 0.001 &#39;**&#39; 0.01 &#39;*&#39; 0.05 &#39;.&#39; 0.1 &#39; &#39; 1</code></pre>
+<h1 id="step-2-extract-per-observation-cate-estimates">Step 2: extract
+per-observation CATE estimates</h1>
+<p><code>predict()</code> with no <code>newdata</code> returns
+out-of-bag predictions by default – each person’s estimate comes from
+trees that did not include them when deciding splits, avoiding the same
+in-sample overfitting problem that motivated honesty splitting in the
+first place.</p>
+<div class="sourceCode" id="cb33"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb33-1"><a href="#cb33-1" tabindex="-1"></a>preds <span class="ot">&lt;-</span> <span class="fu">predict</span>(cf, <span class="at">estimate.variance =</span> <span class="cn">TRUE</span>)</span>
+<span id="cb33-2"><a href="#cb33-2" tabindex="-1"></a>tau_hat <span class="ot">&lt;-</span> preds<span class="sc">$</span>predictions</span>
+<span id="cb33-3"><a href="#cb33-3" tabindex="-1"></a>tau_se  <span class="ot">&lt;-</span> <span class="fu">sqrt</span>(preds<span class="sc">$</span>variance.estimates)</span>
+<span id="cb33-4"><a href="#cb33-4" tabindex="-1"></a></span>
+<span id="cb33-5"><a href="#cb33-5" tabindex="-1"></a>df_cf<span class="sc">$</span>tau_hat <span class="ot">&lt;-</span> tau_hat</span>
+<span id="cb33-6"><a href="#cb33-6" tabindex="-1"></a>df_cf<span class="sc">$</span>tau_se  <span class="ot">&lt;-</span> tau_se</span></code></pre></div>
+<h1 id="step-3-section-53-style--cates-across-each-covariate">Step 3:
+Section 5.3 style – CATEs across each covariate</h1>
+<p>Since every covariate here is binary, there is no continuum to trace
+a smoothed line across (unlike Figure 5 in Rehill (2025), built on
+continuous simulated covariates). The direct equivalent is a boxplot
+comparing the two groups for each covariate, faceted together.</p>
+<div class="sourceCode" id="cb34"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb34-1"><a href="#cb34-1" tabindex="-1"></a>df_long <span class="ot">&lt;-</span> df_cf <span class="sc">%&gt;%</span></span>
+<span id="cb34-2"><a href="#cb34-2" tabindex="-1"></a>  <span class="fu">select</span>(tau_hat, <span class="fu">all_of</span>(covariate_names)) <span class="sc">%&gt;%</span></span>
+<span id="cb34-3"><a href="#cb34-3" tabindex="-1"></a>  <span class="fu">pivot_longer</span>(<span class="at">cols =</span> <span class="fu">all_of</span>(covariate_names), <span class="at">names_to =</span> <span class="st">&quot;covariate&quot;</span>, <span class="at">values_to =</span> <span class="st">&quot;value&quot;</span>)</span>
+<span id="cb34-4"><a href="#cb34-4" tabindex="-1"></a></span>
+<span id="cb34-5"><a href="#cb34-5" tabindex="-1"></a><span class="fu">ggplot</span>(df_long, <span class="fu">aes</span>(<span class="at">x =</span> <span class="fu">factor</span>(value), <span class="at">y =</span> tau_hat)) <span class="sc">+</span></span>
+<span id="cb34-6"><a href="#cb34-6" tabindex="-1"></a>  <span class="fu">geom_boxplot</span>(<span class="at">outlier.alpha =</span> <span class="fl">0.3</span>) <span class="sc">+</span></span>
+<span id="cb34-7"><a href="#cb34-7" tabindex="-1"></a>  <span class="fu">facet_wrap</span>(<span class="sc">~</span> covariate, <span class="at">scales =</span> <span class="st">&quot;free_x&quot;</span>) <span class="sc">+</span></span>
+<span id="cb34-8"><a href="#cb34-8" tabindex="-1"></a>  <span class="fu">labs</span>(</span>
+<span id="cb34-9"><a href="#cb34-9" tabindex="-1"></a>    <span class="at">x =</span> <span class="st">&quot;Covariate value (0/1)&quot;</span>,</span>
+<span id="cb34-10"><a href="#cb34-10" tabindex="-1"></a>    <span class="at">y =</span> <span class="st">&quot;Estimated CATE (name penalty on callback probability)&quot;</span>,</span>
+<span id="cb34-11"><a href="#cb34-11" tabindex="-1"></a>    <span class="at">title =</span> <span class="st">&quot;CATE distribution by covariate value&quot;</span></span>
+<span id="cb34-12"><a href="#cb34-12" tabindex="-1"></a>  ) <span class="sc">+</span></span>
+<span id="cb34-13"><a href="#cb34-13" tabindex="-1"></a>  <span class="fu">theme_minimal</span>()</span></code></pre></div>
+<p><img role="img" src="data:image/png;base64,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" /><!-- --></p>
+<h1 id="step-4-statistical-backup--best-linear-projection">Step 4:
+statistical backup – Best Linear Projection</h1>
+<p>A boxplot difference is suggestive, not proof. For a binary
+covariate, the BLP coefficient is mathematically the same quantity as
+the difference between the two boxes’ means, but with a properly
+resampled standard error and p-value attached – this is the number to
+actually cite, not the picture.</p>
+<div class="sourceCode" id="cb35"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb35-1"><a href="#cb35-1" tabindex="-1"></a>blp_results <span class="ot">&lt;-</span> <span class="fu">best_linear_projection</span>(cf, X[, covariate_names])</span>
+<span id="cb35-2"><a href="#cb35-2" tabindex="-1"></a><span class="fu">print</span>(blp_results)</span></code></pre></div>
+<pre><code>## 
+## Best linear projection of the conditional average treatment effect.
+## Confidence intervals are cluster- and heteroskedasticity-robust (HC3):
+## 
+##                           Estimate  Std. Error t value Pr(&gt;|t|)   
+## (Intercept)            -0.07229488  0.02200561 -3.2853 0.001025 **
+## female                 -0.03693467  0.01820305 -2.0290 0.042501 * 
+## ba_quality              0.04316127  0.01834997  2.3521 0.018701 * 
+## extracurricular_skills  0.02532413  0.01936108  1.3080 0.190929   
+## language_skills        -0.01059127  0.02180557 -0.4857 0.627189   
+## ma                     -0.00087955  0.02272763 -0.0387 0.969131   
+## same_exp                0.02373916  0.02458365  0.9656 0.334262   
+## exp_highquality         0.00422518  0.02485259  0.1700 0.865009   
+## ---
+## Signif. codes:  0 &#39;***&#39; 0.001 &#39;**&#39; 0.01 &#39;*&#39; 0.05 &#39;.&#39; 0.1 &#39; &#39; 1</code></pre>
+<h1 id="step-5-spotlight-comparison-for-language_skills">Step 5:
+spotlight comparison for language_skills</h1>
+<p>Since this connects directly back to Interaction Model 1
+(<code>interaction1_language_signal.Rmd</code>), it’s worth a dedicated,
+cleaner comparison: group means with confidence intervals rather than a
+full boxplot, which reads more like the coefficient-style output already
+used elsewhere in this project.</p>
+<div class="sourceCode" id="cb37"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb37-1"><a href="#cb37-1" tabindex="-1"></a>language_summary <span class="ot">&lt;-</span> df_cf <span class="sc">%&gt;%</span></span>
+<span id="cb37-2"><a href="#cb37-2" tabindex="-1"></a>  <span class="fu">group_by</span>(language_skills) <span class="sc">%&gt;%</span></span>
+<span id="cb37-3"><a href="#cb37-3" tabindex="-1"></a>  <span class="fu">summarise</span>(</span>
+<span id="cb37-4"><a href="#cb37-4" tabindex="-1"></a>    <span class="at">mean_tau =</span> <span class="fu">mean</span>(tau_hat),</span>
+<span id="cb37-5"><a href="#cb37-5" tabindex="-1"></a>    <span class="at">se_tau   =</span> <span class="fu">sd</span>(tau_hat) <span class="sc">/</span> <span class="fu">sqrt</span>(<span class="fu">n</span>()),</span>
+<span id="cb37-6"><a href="#cb37-6" tabindex="-1"></a>    <span class="at">n        =</span> <span class="fu">n</span>()</span>
+<span id="cb37-7"><a href="#cb37-7" tabindex="-1"></a>  )</span>
+<span id="cb37-8"><a href="#cb37-8" tabindex="-1"></a></span>
+<span id="cb37-9"><a href="#cb37-9" tabindex="-1"></a><span class="fu">ggplot</span>(language_summary, <span class="fu">aes</span>(<span class="at">x =</span> <span class="fu">factor</span>(language_skills), <span class="at">y =</span> mean_tau)) <span class="sc">+</span></span>
+<span id="cb37-10"><a href="#cb37-10" tabindex="-1"></a>  <span class="fu">geom_col</span>(<span class="at">fill =</span> <span class="st">&quot;steelblue&quot;</span>, <span class="at">width =</span> <span class="fl">0.5</span>) <span class="sc">+</span></span>
+<span id="cb37-11"><a href="#cb37-11" tabindex="-1"></a>  <span class="fu">geom_errorbar</span>(<span class="fu">aes</span>(<span class="at">ymin =</span> mean_tau <span class="sc">-</span> <span class="fl">1.96</span> <span class="sc">*</span> se_tau, <span class="at">ymax =</span> mean_tau <span class="sc">+</span> <span class="fl">1.96</span> <span class="sc">*</span> se_tau),</span>
+<span id="cb37-12"><a href="#cb37-12" tabindex="-1"></a>                <span class="at">width =</span> <span class="fl">0.15</span>) <span class="sc">+</span></span>
+<span id="cb37-13"><a href="#cb37-13" tabindex="-1"></a>  <span class="fu">labs</span>(</span>
+<span id="cb37-14"><a href="#cb37-14" tabindex="-1"></a>    <span class="at">x =</span> <span class="st">&quot;Language skills listed (0/1)&quot;</span>,</span>
+<span id="cb37-15"><a href="#cb37-15" tabindex="-1"></a>    <span class="at">y =</span> <span class="st">&quot;Mean estimated CATE&quot;</span>,</span>
+<span id="cb37-16"><a href="#cb37-16" tabindex="-1"></a>    <span class="at">title =</span> <span class="st">&quot;Forest-estimated name penalty, by language signal&quot;</span></span>
+<span id="cb37-17"><a href="#cb37-17" tabindex="-1"></a>  ) <span class="sc">+</span></span>
+<span id="cb37-18"><a href="#cb37-18" tabindex="-1"></a>  <span class="fu">theme_minimal</span>()</span></code></pre></div>
+<p><img role="img" src="data:image/png;base64,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" /><!-- --></p>
+<p><strong>Reading this alongside Interaction Model 1:</strong> the BLP
+coefficient on <code>language_skills</code> from Step 4 is the forest’s
+version of the <code>W:language_skills</code> coefficient from the
+linear interaction model. If the two roughly agree in sign, size, and
+significance, that’s evidence the forest confirms the earlier null
+result. If they diverge, that’s evidence of heterogeneity the single
+pre-specified linear interaction missed – either way, report both
+numbers side by side rather than the plot alone.</p>
+
+</body>
+</html>
