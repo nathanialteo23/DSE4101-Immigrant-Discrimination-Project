@@ -1,5 +1,5 @@
 ---
-title: "Pre-Specified Interaction Models --- Multinational Experience (same_exp) x Resume Signals"
+title: "Pre-Specified Interaction Model 1 --- Name x multinational work exp  Signal"
 author: "DSE4101 Immigrant Discrimination Project"
 date: "`r Sys.Date()`"
 output:
@@ -12,37 +12,27 @@ knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE)
 ```
 
 
-**Base treatment (fixed across all interaction models in this series):**  
-`S = 1(same_exp == 1)` vs. `same_exp == 0`, restricted to  
-`name_ethnicity %in% c("Canada", "Chinese", "Indian", "Pakistani")` and  
-`type %in% c(0, 1)`.  
+**Base treatment (fixed across all interaction models in this series):**
+`W = 1(type == 1)` vs. `type == 0`, restricted to
+`name_ethnicity %in% c("Canada", "Chinese", "Indian", "Pakistani")`. Type 0 to
+Type 1 changes *only* the applicant's name --- education and work-experience
+origin are held at "Canadian" for both --- so `W` isolates the pure name
+effect, uncontaminated by the foreign-credential confounds present in Types
+2--4. This is narrower than the Type 0--4 comparison used in the Table 4/5
+baseline replication, and matches TC's instruction to restrict the causal
+forest step to this cleaner contrast.
 
-Here, `same_exp` indicates whether the applicant lists work experience at the same multinational firm that posted the job (i.e., recognizable, high-status employer experience). By restricting to Types 0–1, we hold the name/credential structure constant (Canadian education and experience) and isolate how the multinational-experience signal interacts with other resume characteristics, without mixing in the additional foreign-credential confounds present in Types 2–4.
+**This model's moderator:** `same_exp`, i.e. whether the resume lists
+additional multinational work experience This directly operationalizes the statistical
+discrimination test in Oreopoulos (2011) and Phelps (1972): the name penalty
+should shrink when a resume supplies a stronger, unambiguous productivity
+signal.
 
-**These models' moderators:**  
-We estimate two related specifications:
-
-1. **Model 1: `same_exp × type` (with all other controls included linearly)**  
-   - Question: Does the multinational-experience premium differ between Type 0 (Canadian name) and Type 1 (foreign name)?  
-   - Motivation: Foreign-name discrimination is well-documented (Oreopoulos, 2011; Quillian et al., 2017). Multinational experience may partially offset foreign-name penalties by signaling proven performance in global firms, implying a larger premium for foreign-named applicants.  
-   - All other resume signals (`female`, `name_ethnicity`, `ma`, `ba_quality`, `exp_highquality`, `language_skills`, `extracurricular_skills`, `reference`, `accreditation`) are included as **main effects only** (no interactions).
-
-2. **Model 2: `same_exp × (female, name_ethnicity, ma, ba_quality, exp_highquality, language_skills, extracurricular_skills, reference, accreditation)`**  
-   - Question: Are returns to multinational experience heterogeneous by gender, ethnicity, education quality, and other resume signals?  
-   - Motivation: Gendered evaluation of experience (Quadlin, 2018; Birkelund et al., 2023), ethnic penalties (Oreopoulos, 2011), and signaling/complementarity between education and employer prestige (Phelps, 1972; Aigner & Cain, 1977; Ferrer, Picot, & Riddell, 2014; Reitz, 2001).  
-   - `type` is included as a **main effect only** (no interaction with `same_exp` in this model).
-
-**On standard errors and clustering.**  
-The original Oreopoulos (2011) Stata code uses robust SEs only, never clustering.  
-Our design sends multiple resumes to the same employer (typically ~4 per firm),  
-so observations within `firmid` are not independent. We therefore:
-
-- Report **robust SEs** (HC1) to match the original approach.  
-- Report **clustered SEs by `firmid`** (CR2) as our preferred specification,  
-  following our group proposal and standard practice for audit studies with  
-  within-firm randomization.
-
-Both are reported side by side so the deviation is explicit and auditable.
+**On standard errors.** The original Stata code uses `robust` SEs only,
+never clustering. Our own group proposal specifies clustering by `firmid`
+instead, since ~4 resumes are sent to each employer in most waves. Both are
+reported below side by side so the deviation is explicit and auditable rather
+than silently substituted.
 
 # Setup
 
@@ -50,7 +40,7 @@ Both are reported side by side so the deviation is explicit and auditable.
 required_packages <- c("haven", "estimatr", "dplyr", "modelsummary")
 missing_packages  <- setdiff(required_packages, rownames(installed.packages()))
 if (length(missing_packages) > 0) {
-  install.packages(missing_packages, repos = "[https://cloud.r-project.org](https://cloud.r-project.org)")
+  install.packages(missing_packages, repos = "https://cloud.r-project.org")
 }
 library(haven)
 library(estimatr)
@@ -67,186 +57,59 @@ df <- read_dta(data_path)
 # Sample construction
 
 ```{r sample}
-df_same <- df %>%
+df_int1 <- df %>%
   filter(
     type %in% c(0, 1),
     name_ethnicity %in% c("Canada", "Chinese", "Indian", "Pakistani")
   ) %>%
   mutate(
-    S              = as.numeric(same_exp == 1),  # 1 = multinational-firm experience
+    W              = as.numeric(type == 1),   # 1 = foreign name (Type 1), 0 = Type 0 baseline
     fall_data      = factor(fall_data),
-    # Recode moderators and controls; treat NA as 0 where structurally undefined
     female                 = ifelse(is.na(female), 0, female),
-    ba_quality             = ifelse(is.na(ba_quality), 0, ba_quality),
-    extracurricular_skills = ifelse(is.na(extracurricular_skills), 0, extracurricular_skills),
-    ma                     = ifelse(is.na(ma), 0, ma),
-    same_exp               = ifelse(is.na(same_exp), 0, same_exp),
-    exp_highquality        = ifelse(is.na(exp_highquality), 0, exp_highquality),
-    language_skills        = ifelse(is.na(language_skills), 0, language_skills),
-    accreditation          = ifelse(is.na(accreditation), 0, accreditation),
-    reference              = ifelse(is.na(reference), 0, reference),
-    type                   = as.numeric(type == 1),  # 1 = foreign name (Type 1), 0 = Canadian name (Type 0)
-    name_ethnicity         = factor(name_ethnicity)
+    ba_quality              = ifelse(is.na(ba_quality), 0, ba_quality),
+    language_skills         = ifelse(is.na(language_skills), 0, language_skills),
+    ma                      = ifelse(is.na(ma), 0, ma),
+    same_exp                = ifelse(is.na(same_exp), 0, same_exp),
+    exp_highquality         = ifelse(is.na(exp_highquality), 0, exp_highquality),
+    same_exp  = ifelse(is.na(same_exp), 0, same_exp)
   )
 
-cat("Analysis sample size:", nrow(df_same), "\n")
-cat("Treatment (S = multinational experience) distribution:\n")
-print(table(df_same$S))
-cat("Gender distribution:\n")
-print(table(df_same$female))
-cat("Name ethnicity distribution:\n")
-print(table(df_same$name_ethnicity))
-cat("Type distribution:\n")
-print(table(df_same$type))
+cat("Analysis sample size:", nrow(df_int1), "\n")
+cat("Treatment (W) distribution:\n")
+print(table(df_int1$W))
 ```
 
-# Model 1: `callback ~ same_exp × type + all other controls (main effects only)`
+# Model: `callback ~ W * same_exp + controls`
 
-We first estimate a parsimonious interaction model focusing on whether the multinational-experience premium differs by name type (Canadian vs. foreign), while still controlling for all other resume characteristics as main effects.
-
-```{r fit-m1}
-# (1) Robust SEs only
-m1_robust <- lm_robust(
-  callback ~ S * type +
-    female + name_ethnicity + ma + ba_quality + exp_highquality +
-    language_skills + extracurricular_skills + reference + accreditation +
-    fall_data,
-  data = df_same, se_type = "HC1"
+```{r fit}
+# (1) Robust SEs only -- matching Oreopoulos's original approach
+m_robust <- lm_robust(
+  callback ~ W + same_exp + W:same_exp + female + ba_quality +
+           language_skills + ma + same_exp + exp_highquality + fall_data,
+  data = df_int1, se_type = "HC1"
 )
 
 # (2) Clustered by firmid
-m1_clustered <- lm_robust(
-  callback ~ S * type +
-    female + name_ethnicity + ma + ba_quality + exp_highquality +
-    language_skills + extracurricular_skills + reference + accreditation +
-    fall_data,
-  data = df_same, clusters = firmid, se_type = "CR2"
+m_clustered <- lm_robust(
+  callback ~ W + same_exp + W:same_exp + female + ba_quality +
+             language_skills + ma + same_exp + exp_highquality + fall_data,
+  data = df_int1, clusters = firmid, se_type = "CR2"
 )
 ```
 
-## Table: Model 1 (same_exp × type)
+## Combined table
 
-```{r table-m1, results = "asis"}
+```{r table, results = "asis"}
 modelsummary(
   list(
-    "Robust SE"           = m1_robust,
-    "Clustered by firmid" = m1_clustered
+    "Robust SE (Oreopoulos-style)" = m_robust,
+    "Clustered by firm (proposal)"  = m_clustered
   ),
   stars    = TRUE,
   coef_omit = "fall_data",
   gof_omit  = "IC|Log|Adj|F|RMSE",
-  title     = "Model 1: Multinational Experience × Type (0 vs. 1)"
+  title     = "Interaction Model 1: Name Penalty x multinational work experience Signal (Type 0 vs. Type 1)"
 )
 ```
 
-**Coefficient of interest:** `S:type`  
-- A **positive and significant** estimate implies that the multinational-experience premium is larger for foreign-named applicants (Type 1) than for Canadian-named applicants (Type 0), consistent with multinational experience partially offsetting foreign-name penalties (Oreopoulos, 2011; Quillian et al., 2017).  
-- A **null or negative** estimate would suggest that the premium is similar across name types, or even smaller for foreign names.
-
-All other resume signals (`female`, `name_ethnicity`, `ma`, `ba_quality`, etc.) are included as **controls only** (no interactions) in this model.
-
----
-
-# Model 2: `callback ~ same_exp × (all other signals) + type + controls`
-
-We now estimate a richer specification that allows the return to multinational experience to vary by gender, ethnicity, education quality, and other resume signals. Here, `type` is included as a main effect only.
-
-```{r fit-m2}
-# (1) Robust SEs only
-m2_robust <- lm_robust(
-  callback ~ 
-    S * (
-      female +
-      name_ethnicity +
-      ma +
-      ba_quality +
-      exp_highquality +
-      language_skills +
-      extracurricular_skills +
-      reference +
-      accreditation
-    ) +
-    type + fall_data,
-  data = df_same, se_type = "HC1"
-)
-
-# (2) Clustered by firmid
-m2_clustered <- lm_robust(
-  callback ~ 
-    S * (
-      female +
-      name_ethnicity +
-      ma +
-      ba_quality +
-      exp_highquality +
-      language_skills +
-      extracurricular_skills +
-      reference +
-      accreditation
-    ) +
-    type + fall_data,
-  data = df_same, clusters = firmid, se_type = "CR2"
-)
-```
-
-## Table: Model 2 (same_exp × all other signals)
-
-```{r table-m2, results = "asis"}
-modelsummary(
-  list(
-    "Robust SE"           = m2_robust,
-    "Clustered by firmid" = m2_clustered
-  ),
-  stars    = TRUE,
-  coef_omit = "fall_data",
-  gof_omit  = "IC|Log|Adj|F|RMSE",
-  title     = "Model 2: Multinational Experience × Resume Signals"
-)
-```
-
-## Interpretation guide for Model 2
-
-Focus on the interaction terms:
-
-- **`S:female`**  
-  Tests whether men and women benefit equally from multinational-firm experience.  
-  Gendered evaluation of experience and occupational sorting imply possible asymmetries (Quadlin, 2018; Birkelund et al., 2023).
-
-- **`S:name_ethnicity`**  
-  Tests whether the same_exp premium differs for Chinese, Indian, and Pakistani names relative to Canadian names.  
-  Given persistent foreign-name discrimination (Oreopoulos, 2011; Quillian et al., 2017), multinational experience may partially offset these penalties if it signals proven performance in global firms.
-
-- **`S:ma`**  
-  Tests whether a Canadian master's degree and multinational experience are complements or substitutes.  
-  Both signal high-quality, recognizable human capital; a positive interaction would support complementarity, while a null or negative interaction would suggest substitution (Ferrer, Picot, & Riddell, 2014; Reitz, 2001).
-
-- **`S:ba_quality`**  
-  Tests whether a top‑200 BA amplifies the multinational-experience premium.  
-  Elite education plus global employer experience may jointly signal high ability and international exposure (Phelps, 1972; Aigner & Cain, 1977).
-
-- **`S:exp_highquality`**  
-  Tests whether "high-quality" experience beyond the multinational label adds extra return.  
-  If the multinational signal already captures most of the experience premium, this interaction may be small or null.
-
-- **`S:language_skills`, `S:extracurricular_skills`, `S:reference`, `S:accreditation`**  
-  These capture whether additional productivity/fit signals (activities, language fluency, Canadian references, foreign-education accreditation) interact with multinational experience.  
-  For immigrants, accreditation and Canadian references may either compensate for or reinforce the value of multinational experience, depending on how employers weigh "global" vs. "local" signals (Reitz, 2001; Ferrer, Picot, & Riddell, 2014).
-
-A **positive and significant** interaction means that the corresponding signal increases the callback probability *more* when the applicant also has multinational-firm experience. A **negative and significant** interaction means that the signal either dampens the multinational-experience premium or that the two signals are partially redundant.
-
----
-
-## Key references (for your write-up / bibliography)
-
-You can cite these in your paper when discussing this model:
-
-- Aigner, D. J., & Cain, G. G. (1977). "Statistical Theories of Discrimination in Labor Markets." *Industrial and Labor Relations Review, 30*(2), 175–187.  
-- Birkelund, H., Coenders, M., Di Stasio, V., et al. (2023). "Gender composition predicts gender bias: A meta-reanalysis of hiring discrimination audit experiments." *Science Advances*.  
-- Ferrer, A. M., Picot, G., & Riddell, W. C. (2014). "New Directions for Immigration Policy in Canada." *Canadian Public Policy / Analyse de Politiques, 40*(1), 1–17.  
-- Oreopoulos, P. (2011). "Why Do Skilled Immigrants Struggle in the Labor Market? A Field Experiment with Six Thousand Resumes." NBER Working Paper No. 15036.  
-- Phelps, E. S. (1972). "The Statistical Theory of Racism and Sexism." *American Economic Review, 62*(4), 659–661.  
-- Quadlin, N. (2018). "The Mark of a Woman's Record: Gender and Academic Performance in Hiring." *American Sociological Review, 83*(2), 331–360.  
-- Quillian, L., Pager, D., Hexel, O., & Midtbøen, A. H. (2017). "Discrimination in the Labor Market." *Annual Review of Sociology, 43*, 359–383.  
-- Reitz, J. G. (2001). "Immigrant Skill Utilization in the Canadian Labour Market: Implications of Human Capital Research." *Journal of International Migration and Integration, 2*(1), 1–46.  
-
-Replace these with your final BibTeX entries, but keep the mapping between each interaction term and the corresponding mechanism/paper as outlined above.
+The coefficient of interest is W:same_exp. A positive estimate would mean that listing multinational work experience reduces the name penalty associated with having a foreign name. In this model, the interaction coefficient is positive but statistically insignificant at conventional levels (0.0210.021, standard error =0.020=0.020 with robust standard errors; 0.0210.021, standard error =0.019=0.019 with firm-clustered standard errors). Therefore, the results do not provide statistically significant evidence that the difference in callback rates between foreign- and baseline-name applicants changes when multinational work experience is listed. Although the point estimate suggests that the name penalty becomes 0.021 percentage points smaller, this estimate is imprecise. Consequently, the findings do not provide sufficient evidence that employers respond to multinational work experience as an observable signal of applicant quality that reduces their reliance on the applicant's name as a signal of expected productivity.
