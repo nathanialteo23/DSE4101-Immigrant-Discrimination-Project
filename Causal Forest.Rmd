@@ -50,10 +50,7 @@ df_int1 <- df %>%
     ma                      = ifelse(is.na(ma), 0, ma),
     same_exp                = ifelse(is.na(same_exp), 0, same_exp),
     exp_highquality         = ifelse(is.na(exp_highquality), 0, exp_highquality),
-    language_skills         = ifelse(is.na(language_skills), 0, language_skills),
-    reference               = ifelse(is.na(reference), 0, reference),
-    accreditation           = ifelse(is.na(accreditation), 0, accreditation),
-    legal                   = ifelse(is.na(legal), 0, legal)
+    language_skills         = ifelse(is.na(language_skills), 0, language_skills)
   )
 
 cat("Analysis sample size:", nrow(df_int1), "\n")
@@ -151,10 +148,7 @@ all_pretreat_cov <- c(
   "extracurricular_skills",
   "ma",
   "same_exp",
-  "exp_highquality",
-  "reference",
-  "accreditation",
-  "legal"
+  "exp_highquality"
 )
 
 
@@ -166,9 +160,6 @@ all_pretreat_cov_fall <- c(
   "ma",
   "same_exp",
   "exp_highquality",
-  "reference",
-  "accreditation",
-  "legal",
   "fall_data"
 )
 
