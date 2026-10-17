@@ -70,15 +70,13 @@ print(counts_all, n = Inf)
 ```{r}
 df_int1 <- df_int1 %>%
   mutate(
-    D              = as.numeric(type == 1),   # 1 = foreign name (Type 1), 0 = Type 0 baseline
-    fall_data      = factor(fall_data),
-    female                 = ifelse(is.na(female), 0, female),
-    ba_quality              = ifelse(is.na(ba_quality), 0, ba_quality),
-    extracurricular_skills  = ifelse(is.na(extracurricular_skills), 0, extracurricular_skills),
-    language_skills         = ifelse(is.na(language_skills), 0, language_skills),
-    ma                      = ifelse(is.na(ma), 0, ma),
-    same_exp                = ifelse(is.na(same_exp), 0, same_exp),
-    exp_highquality         = ifelse(is.na(exp_highquality), 0, exp_highquality)
+    D = as.integer(type == 1), # 1 = foreign name (Type 1), 0 = Type 0 baseline
+    fall_data = factor(fall_data)
+  ) %>%
+  select(
+    -reference,
+    -accreditation,
+    -legal
     # Reference, accreditation, and legal variables are only available in some waves 
     # (present only when fall_data == 2), so drop them to ensure consistency across waves.
   )
@@ -87,4 +85,6 @@ cat("Analysis sample size:", nrow(df_int1), "\n")
 cat("Treatment (D) distribution:\n")
 print(table(df_int1$D))
 ```
+
+
 
