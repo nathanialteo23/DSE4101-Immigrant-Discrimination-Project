@@ -6,6 +6,7 @@ date: "2026-09-30"
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
+
 ```
 
 # Setup
@@ -93,6 +94,7 @@ print(table(df_int1$D))
 3. Y: callback rate
 4. 
 ```{r}
+set.seed(4101)  # For reproducibility
 forest1df_X <- df_int1 %>%
   select(language_skills,extracurricular_skills,same_exp)%>%
   as.matrix()
@@ -165,6 +167,7 @@ kable(vi_tab, digits = 3, caption = "Causal forest variable importance")
 4. 
 ```{r}
 # TO ASK: MUST WE INCLUDE FALL_DATA?
+set.seed(4101)  # For reproducibility
 df_int1 <- df_int1 %>%
   mutate(
     fall_data = as.numeric(as.character(fall_data))
@@ -256,5 +259,317 @@ vi_tab <- data.frame(
 kable(vi_tab, digits = 3, caption = "Causal forest variable importance")
 ```
 
+## 0. Sanity checks on sample and treatment coding
+
+```{r val-sanity}
+library(estimatr)
+
+cat("N:", nrow(df_int1), "(expected 5,657)\n")
+cat("Firms:", length(unique(df_int1$firmid)), "\n")
+cat("Resumes per firm:\n")
+print(summary(as.numeric(table(df_int1$firmid))))
+
+cat("\nTreatment counts (expected 3,026 control / 2,631 treated):\n")
+print(table(D = df_int1$D))
+
+cat("\nName ethnicity by treatment (D must match the coding exactly):\n")
+print(table(ethnicity = as.character(df_int1$name_ethnicity), D = df_int1$D))
+
+cat("\nWave by treatment:\n")
+print(table(wave = df_int1$fall_data, D = df_int1$D))
+```
 
 
+`cf1w` is the three-moderator forest plus the wave indicator, so it is the like-for-like comparison with the wave-adjusted regressions. `cf1` and `cf2` are the forests as already built. All three are validated and reported; none is picked after the fact.
+
+```{r val-forests}
+set.seed(4101)  # For reproducibility
+forest1wX <- df_int1 %>%
+  select(language_skills, extracurricular_skills, same_exp, fall_data) %>%
+  as.matrix()
+
+cf1w <- causal_forest(forest1wX,
+                      as.numeric(df_int1$callback),
+                      df_int1$D,
+                      clusters = df_int1$firmid)
+
+forests <- list(
+  "cf1 (3 moderators)"         = list(cf = cf1,  X = forest1df_X),
+  "cf1w (3 moderators + wave)" = list(cf = cf1w, X = forest1wX),
+  "cf2 (full covariates)"      = list(cf = cf2,  X = forest2df_X)
+)
+```
+
+## 2. Balance table (does not depend on any forest)
+
+SMD = (mean in D=1 minus mean in D=0) / sqrt((var in D=1 + var in D=0) / 2). Rule of thumb: |SMD| < 0.1 counts as balanced. The p-value is from a firm-clustered regression of the variable on D. Wave is a three-level code, so it enters as one dummy per wave rather than as a numeric code.
+
+```{r val-balance}
+smd <- function(x, d) {
+  (mean(x[d == 1]) - mean(x[d == 0])) /
+    sqrt((var(x[d == 1]) + var(x[d == 0])) / 2)
+}
+
+fall_num <- as.numeric(as.character(df_int1$fall_data))
+waves    <- sort(unique(fall_num))
+
+df_bal <- df_int1
+for (k in waves) df_bal[[paste0("wave_", k)]] <- as.numeric(fall_num == k)
+
+bal_vars <- c(all_pretreat_cov, paste0("wave_", waves))
+
+balance_row <- function(v, dat) {
+  x   <- as.numeric(dat[[v]])
+  p   <- tryCatch({
+    fit <- lm_robust(as.formula(paste(v, "~ D")), data = dat,
+                     clusters = firmid, se_type = "CR2")
+    unname(fit$p.value["D"])
+  }, error = function(e) NA_real_)
+  data.frame(variable = v,
+             mean_D0  = mean(x[dat$D == 0]),
+             mean_D1  = mean(x[dat$D == 1]),
+             SMD      = smd(x, dat$D),
+             p_clustered = p)
+}
+
+bal_tab <- bind_rows(lapply(bal_vars, balance_row, dat = df_bal)) %>%
+  mutate(flag = ifelse(abs(SMD) >= 0.1, "check", ""))
+
+kable(bal_tab, digits = 3,
+      caption = "Balance of resume characteristics by name type (D = 1 foreign name)")
+```
+
+## Wave checks (paste right after the val-balance chunk)
+
+The balance table shows treated share differs a lot by wave. These three chunks check whether that is a composition issue (which name types were sampled in which wave) or a randomisation problem within wave, and whether the name penalty itself differs by wave.
+
+```{r val-wave-structure}
+# Which name types appear in which wave?
+print(table(wave = df_int1$fall_data,
+            ethnicity = as.character(df_int1$name_ethnicity)))
+
+# Treatment share and callback rate by wave
+wave_tab <- df_int1 %>%
+  group_by(wave = fall_data) %>%
+  summarise(n = n(),
+            treated_share    = mean(D),
+            callback_rate_D0 = mean(as.numeric(callback)[D == 0]),
+            callback_rate_D1 = mean(as.numeric(callback)[D == 1]),
+            .groups = "drop")
+
+kable(wave_tab, digits = 3, caption = "Treatment share and callback rate by wave")
+```
+
+```{r val-balance-within-wave}
+# Balance within wave: difference between name types after absorbing wave fixed effects
+within_row <- function(v) {
+  dat   <- df_int1
+  dat$x <- as.numeric(dat[[v]])
+  fit   <- lm_robust(x ~ D + factor(fall_data), data = dat,
+                     clusters = firmid, se_type = "CR2")
+  data.frame(variable         = v,
+             diff_D1_minus_D0 = unname(coef(fit)["D"]),
+             se               = unname(fit$std.error["D"]),
+             p_clustered      = unname(fit$p.value["D"]))
+}
+
+within_tab <- bind_rows(lapply(all_pretreat_cov, within_row))
+
+kable(within_tab, digits = 3,
+      caption = "Balance within wave (name-type difference, wave fixed effects, firm-clustered)")
+```
+
+```{r val-ate-by-wave}
+# Does the name penalty itself differ by wave?
+ate_wave <- bind_rows(lapply(sort(unique(df_int1$fall_data)), function(k) {
+  dat   <- filter(df_int1, fall_data == k)
+  dat$y <- as.numeric(dat$callback)
+  fit   <- lm_robust(y ~ D, data = dat, clusters = firmid, se_type = "CR2")
+  data.frame(wave      = k,
+             n         = nrow(dat),
+             effect_pp = 100 * unname(coef(fit)["D"]),
+             se_pp     = 100 * unname(fit$std.error["D"]),
+             lo_pp     = 100 * unname(fit$conf.low["D"]),
+             hi_pp     = 100 * unname(fit$conf.high["D"]))
+}))
+
+kable(ate_wave, digits = 2,
+      caption = "Name penalty by wave (percentage points, firm-clustered CR2)")
+```
+
+
+## 3. test_calibration
+
+The differential forest prediction is the number that matters. grf's p-value on it is one-sided (is the coefficient above zero?). Near 1 means well calibrated, between 0 and 1 means the forest overstates the spread, and at or below 0 means the spread isn't tracking real differences.
+
+```{r val-calibration}
+for (nm in names(forests)) {
+  cat("\n====", nm, "====\n")
+  print(test_calibration(forests[[nm]]$cf))
+}
+
+cal_tab <- bind_rows(lapply(names(forests), function(nm) {
+  tc <- test_calibration(forests[[nm]]$cf)
+  data.frame(
+    forest           = nm,
+    mean_est         = tc["mean.forest.prediction", "Estimate"],
+    mean_se          = tc["mean.forest.prediction", "Std. Error"],
+    diff_est         = tc["differential.forest.prediction", "Estimate"],
+    diff_se          = tc["differential.forest.prediction", "Std. Error"],
+    diff_p_one_sided = tc["differential.forest.prediction", "Pr(>t)"]
+  )
+}))
+
+kable(cal_tab, digits = 3, caption = "test_calibration results")
+```
+## 4. RATE / TOC with a firm-level split
+
+Half of the firms train a forest that produces the priority scores; the other half trains a separate evaluation forest. The split is by firm, not by resume, so resumes from one employer never sit on both sides. AUTOC is the primary measure and QINI the secondary one, chosen in advance. The priority score is the forest's predicted effect with no sign flip, so the top of the ranking is the group with the smallest predicted penalty (the least negative effects), and a positive RATE means the ranking sorts correctly.
+
+Seed 1 is the headline split, fixed in advance. Seeds 2 to `n_seeds` are stability checks only. This chunk fits many forests and can take a few minutes.
+
+```{r val-rate}
+Y_all <- as.numeric(df_int1$callback)
+W_all <- df_int1$D
+n_seeds <- 5
+
+make_split <- function(firm, seed) {
+  set.seed(seed)                       # set immediately before sampling so the split is reproducible
+  f <- unique(firm)
+  firm %in% sample(f, floor(length(f) / 2))
+}
+
+run_rate <- function(X, Y, W, firm, train, seed) {
+  cf_train <- causal_forest(X[train, , drop = FALSE],  Y[train],  W[train],
+                            clusters = firm[train],  seed = seed)
+  cf_eval  <- causal_forest(X[!train, , drop = FALSE], Y[!train], W[!train],
+                            clusters = firm[!train], seed = seed)
+  priorities <- predict(cf_train, X[!train, , drop = FALSE])$predictions
+  list(autoc = rank_average_treatment_effect(cf_eval, priorities, target = "AUTOC"),
+       qini  = rank_average_treatment_effect(cf_eval, priorities, target = "QINI"))
+}
+
+rate_res <- lapply(forests, function(f) {
+  out <- lapply(seq_len(n_seeds), function(s) {
+    train <- make_split(df_int1$firmid, s)
+    run_rate(f$X, Y_all, W_all, df_int1$firmid, train, seed = s)
+  })
+  names(out) <- seq_len(n_seeds)
+  out
+})
+
+rate_tab <- bind_rows(lapply(names(rate_res), function(nm) {
+  bind_rows(lapply(names(rate_res[[nm]]), function(s) {
+    a <- rate_res[[nm]][[s]]$autoc
+    q <- rate_res[[nm]][[s]]$qini
+    data.frame(forest = nm, seed = as.integer(s), headline = (s == "1"),
+               autoc = a$estimate, autoc_se = a$std.err,
+               autoc_lo = a$estimate - 1.96 * a$std.err,
+               autoc_hi = a$estimate + 1.96 * a$std.err,
+               qini = q$estimate, qini_se = q$std.err)
+  }))
+}))
+
+kable(rate_tab, digits = 4,
+      caption = "RATE by forest and split seed (headline = seed 1)")
+```
+
+TOC curves for the headline split. The three-moderator forests can produce only a few distinct predictions, so many resumes are tied in the ranking and the curve will look stepped; mention this in the write-up.
+
+```{r val-toc-plots, fig.height=4}
+for (nm in names(rate_res)) {
+  plot(rate_res[[nm]][["1"]]$autoc, main = paste("TOC (AUTOC):", nm),
+       xlab = "Share treated (q), smallest predicted penalty first")
+}
+```
+
+## 5. Combined reading (rule fixed in advance)
+
+Both checks support heterogeneity: calibration differential coefficient positive and significant (one-sided p < 0.05) and the headline AUTOC interval excluding 0. Neither supports it: report that we find no statistically reliable evidence of heterogeneity, and do not interpret forest subgroup patterns. They disagree: call the evidence inconclusive and treat any subgroup patterns as exploratory only. A null here may reflect low power, not constant effects.
+
+```{r val-verdict}
+verdict_tab <- cal_tab %>%
+  left_join(filter(rate_tab, headline), by = "forest") %>%
+  mutate(
+    calibration_supports = diff_p_one_sided < 0.05,
+    rate_supports        = autoc_lo > 0,
+    verdict = case_when(
+      calibration_supports & rate_supports   ~ "Both support heterogeneity",
+      !calibration_supports & !rate_supports ~ "Neither supports: report null",
+      TRUE                                   ~ "Disagree: inconclusive"
+    )
+  ) %>%
+  select(forest, diff_est, diff_se, diff_p_one_sided,
+         autoc, autoc_lo, autoc_hi, verdict)
+
+kable(verdict_tab, digits = 3, caption = "Validation verdict by forest")
+```
+
+## 6. Tuning robustness: one alternative setting (paste after the val-verdict chunk)
+
+One alternative setting, fixed in advance: twice the default trees (4000 vs 2000) and a larger honesty fraction (0.7 vs the grf default 0.5). It is not a grid. The question is only whether the null verdict changes. Seed 1 is the same firm split as the headline RATE result, so the comparison is like for like.
+
+```{r val-tuning-setup}
+alt <- list(num.trees = 4000, honesty.fraction = 0.7)
+
+forests_alt <- lapply(forests, function(f) {
+  list(X  = f$X,
+       cf = causal_forest(f$X, Y_all, W_all,
+                          clusters         = df_int1$firmid,
+                          num.trees        = alt$num.trees,
+                          honesty.fraction = alt$honesty.fraction,
+                          seed             = 123))
+})
+
+cal_alt <- bind_rows(lapply(names(forests_alt), function(nm) {
+  tc <- test_calibration(forests_alt[[nm]]$cf)
+  data.frame(
+    forest           = nm,
+    diff_est         = tc["differential.forest.prediction", "Estimate"],
+    diff_se          = tc["differential.forest.prediction", "Std. Error"],
+    diff_p_one_sided = tc["differential.forest.prediction", "Pr(>t)"]
+  )
+}))
+```
+
+```{r val-tuning-rate}
+run_rate_alt <- function(X, Y, W, firm, train, seed, ...) {
+  cf_train <- causal_forest(X[train, , drop = FALSE],  Y[train],  W[train],
+                            clusters = firm[train],  seed = seed, ...)
+  cf_eval  <- causal_forest(X[!train, , drop = FALSE], Y[!train], W[!train],
+                            clusters = firm[!train], seed = seed, ...)
+  priorities <- predict(cf_train, X[!train, , drop = FALSE])$predictions
+  rank_average_treatment_effect(cf_eval, priorities, target = "AUTOC")
+}
+
+train_1 <- make_split(df_int1$firmid, 1)
+
+rate_alt_tab <- bind_rows(lapply(names(forests), function(nm) {
+  a <- run_rate_alt(forests[[nm]]$X, Y_all, W_all, df_int1$firmid, train_1, seed = 1,
+                    num.trees        = alt$num.trees,
+                    honesty.fraction = alt$honesty.fraction)
+  data.frame(forest = nm,
+             autoc    = a$estimate,
+             autoc_lo = a$estimate - 1.96 * a$std.err,
+             autoc_hi = a$estimate + 1.96 * a$std.err)
+}))
+```
+
+```{r val-tuning-compare}
+stab_tab <- cal_tab %>%
+  select(forest, diff_default = diff_est, p_default = diff_p_one_sided) %>%
+  left_join(select(cal_alt, forest, diff_alt = diff_est, p_alt = diff_p_one_sided),
+            by = "forest") %>%
+  left_join(filter(rate_tab, headline) %>%
+              select(forest, autoc_default = autoc,
+                     lo_default = autoc_lo, hi_default = autoc_hi),
+            by = "forest") %>%
+  left_join(select(rate_alt_tab, forest, autoc_alt = autoc,
+                   lo_alt = autoc_lo, hi_alt = autoc_hi),
+            by = "forest")
+
+kable(stab_tab, digits = 3,
+      caption = "Default vs alternative tuning (4000 trees, honesty fraction 0.7)")
+```
+
+Reading it: the verdict is stable if every forest still has a calibration p above 0.05 and an AUTOC interval that includes 0 under the alternative setting. If one forest flips, report it as sensitive to tuning and treat the evidence for that forest as inconclusive under your combined rule.
