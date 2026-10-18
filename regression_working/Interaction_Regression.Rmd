@@ -1,0 +1,206 @@
+---
+title: "Ex-Ante Interaction Regressions"
+subtitle: "Type 0 vs Type 1 | Oreopoulos replication extension"
+output:
+  pdf_document:
+    toc: true
+    number_sections: true
+    latex_engine: pdflatex
+  html_document:
+    toc: true
+    number_sections: true
+---
+
+# Research objective and specification
+
+We estimate the immigrant-sounding name penalty in employer callback rates and test whether it differs by three **pre-specified moderators**: language skills, extracurricular activities, and gender. The regression estimates provide a theory-driven counterpart to the causal forest's subgroup treatment-effect estimates; this is **not** a predictive-performance horse race.
+
+| Moderator ($X$) | Variable | Question | Expected interaction |
+|:--|:--|:--|:--|
+| Language skills | `language_skills` | Does listing language proficiency reduce the foreign-name callback penalty? | Positive |
+| Extracurricular activities | `extracurricular_skills` | Do extracurricular signals reduce the foreign-name callback penalty? | Positive |
+| Gender | `female` | Is the foreign-name callback penalty less negative for female than male applicants? | Positive |
+
+The positive signs are **ex-ante hypotheses**, not assumed findings. Gender is motivated by gender-differentiated ethnic discrimination, not necessarily by a productivity-signal mechanism.
+
+# Setup and data preparation
+
+The analysis uses the same cleaned Type 0/1 sample (`df_int1`) as the balance-table and causal-forest scripts. Treatment $D=1$ denotes a foreign-sounding name (Type 1), and $D=0$ an English-sounding name (Type 0). Outcome $Y$ is the callback indicator. Inference is clustered by `firmid`.
+
+```{r setup, message=FALSE, warning=FALSE}
+required <- c("dplyr", "estimatr", "knitr")
+missing <- setdiff(required, rownames(installed.packages()))
+if (length(missing)) install.packages(missing, repos="https://cloud.r-project.org")
+library(dplyr)
+library(estimatr)
+library(knitr)
+```
+
+```{r sample}
+if (!file.exists("cleaned data.Rda")) stop("Run cleaned_data.Rmd first, or put cleaned data.Rda in this working directory.")
+loaded <- load("cleaned data.Rda")
+stopifnot("df_int1" %in% loaded)
+required_cols <- c("D", "callback", "firmid", "fall_data", "type", "language_skills", "extracurricular_skills", "female", "ba_quality", "ma", "exp_highquality")
+stopifnot(all(required_cols %in% names(df_int1)))
+dat <- df_int1 %>% mutate(
+  D = as.numeric(as.character(D)),
+  callback = as.numeric(as.character(callback)),
+  wave = factor(fall_data)
+)
+stopifnot(all(na.omit(dat$D) %in% 0:1), all(na.omit(dat$callback) %in% 0:1))
+cat("Observations:", nrow(dat), "\n")
+print(table(dat$D, useNA="ifany"))
+print(table(dat$type, dat$D, useNA="ifany"))
+cat("Firms:", dplyr::n_distinct(dat$firmid), "\n")
+```
+
+`same_exp` is excluded from the primary controls because it is systematically missing in wave 2; including it would remove that wave. The common main-effect control set is `language_skills`, `extracurricular_skills`, `female`, `ba_quality`, `ma`, and `exp_highquality`.
+
+# Baseline average treatment effect
+
+We estimate a wave-adjusted linear probability model:
+
+$$Y_i = \beta_0 + \beta_1 D_i + \delta_{w(i)} + \varepsilon_i.$$
+
+Here $\beta_1$ is the wave-adjusted name effect, with firm-clustered CR2 standard errors. We also report a covariate-adjusted version as a robustness specification.
+
+```{r baseline}
+ate_wave <- lm_robust(callback ~ D + wave, data=dat, clusters=firmid, se_type="CR2")
+ate_adjusted <- lm_robust(callback ~ D + language_skills + extracurricular_skills + female +
+                            ba_quality + ma + exp_highquality + wave,
+                          data=dat, clusters=firmid, se_type="CR2")
+
+
+extract_D <- function(model, label) {
+
+  results <- broom::tidy(model, conf.int = TRUE)
+
+  treatment <- results[results$term == "D", ]
+
+  if (nrow(treatment) != 1) {
+    stop("Could not find treatment coefficient D")
+  }
+
+  data.frame(
+    model = label,
+    estimate = treatment$estimate,
+    se = treatment$std.error,
+    ci_low = treatment$conf.low,
+    ci_high = treatment$conf.high,
+    p_value = treatment$p.value,
+    n = nobs(model)
+  )
+}
+
+
+kable(bind_rows(extract_D(ate_wave, "Wave-adjusted"),
+                extract_D(ate_adjusted, "Wave + covariate adjusted")), digits=4,
+      caption="Average name effect (foreign minus English name)")
+```
+
+# Three ex-ante interaction regressions
+
+For each moderator $X$, we estimate:
+
+$$Y_i = \beta_0 + \beta_1 D_i + \beta_2 X_i + \beta_3(D_i \times X_i) + \boldsymbol{\gamma}' Z_i + \delta_{w(i)} + \varepsilon_i.$$
+
+$Z$ contains the **other five** common controls (the focal moderator is already included as a main effect). $\beta_3$ tests whether the name effect differs between $X=1$ and $X=0$. The models are fitted separately, using the same full analysis sample where complete.
+
+```{r interactions}
+moderators <- c("language_skills", "extracurricular_skills", "female")
+controls <- c("language_skills", "extracurricular_skills", "female",
+              "ba_quality", "ma", "exp_highquality")
+fit_interaction <- function(x) {
+  rhs <- c("D", x, paste0("D:", x), setdiff(controls, x), "wave")
+  f <- reformulate(rhs, response="callback")
+  lm_robust(f, data=dat, clusters=firmid, se_type="CR2")
+}
+models <- setNames(lapply(moderators, fit_interaction), moderators)
+
+interaction_table <- bind_rows(lapply(moderators, function(x) {
+
+  m <- models[[x]]
+  term <- paste0("D:", x)
+
+  # Extract regression results with confidence intervals
+  results <- broom::tidy(m, conf.int = TRUE)
+
+  # Select the interaction coefficient
+  interaction <- results[results$term == term, ]
+
+  if (nrow(interaction) != 1) {
+    stop(paste("Interaction term not found:", term))
+  }
+
+  data.frame(
+    moderator = x,
+    interaction = interaction$estimate,
+    se = interaction$std.error,
+    p_value = interaction$p.value,
+    ci_low = interaction$conf.low,
+    ci_high = interaction$conf.high,
+    n = nobs(m)
+  )
+}))
+
+kable(interaction_table, digits=4, caption="Ex-ante interaction coefficients (D x X)")
+```
+
+# Regression-implied subgroup treatment effects
+
+For each binary moderator, the model-implied treatment effects are:
+
+$$\widehat{\tau}(X=0)=\widehat{\beta}_1, \qquad \widehat{\tau}(X=1)=\widehat{\beta}_1+\widehat{\beta}_3.$$
+
+For $X=1$, the variance must include the covariance between the two coefficient estimates:
+
+$$\widehat{\mathrm{Var}}(\widehat{\beta}_1+\widehat{\beta}_3)=\widehat{\mathrm{Var}}(\widehat{\beta}_1)+\widehat{\mathrm{Var}}(\widehat{\beta}_3)+2\widehat{\mathrm{Cov}}(\widehat{\beta}_1,\widehat{\beta}_3).$$
+
+The following code uses each model's firm-clustered covariance matrix and its degrees of freedom to calculate 95% confidence intervals. These subgroup effects, not the raw interaction coefficients, will be compared with `average_treatment_effect(cf, subset = ...)` from the causal forest.
+
+```{r subgroup-effects}
+subgroup_effects <- bind_rows(lapply(moderators, function(x) {
+  m <- models[[x]]
+  b <- coef(m)
+  V <- vcov(m)
+  interaction <- paste0("D:", x)
+  out <- lapply(0:1, function(z) {
+    a <- setNames(rep(0, length(b)), names(b))
+    a["D"] <- 1
+    if (z == 1) a[interaction] <- 1
+    estimate <- sum(a * b)
+    se <- sqrt(drop(t(a) %*% V %*% a))
+    # estimatr stores coefficient-specific degrees of freedom
+    df <- min(m$df[match(c("D", interaction), names(b))], na.rm=TRUE)
+    crit <- qt(0.975, df=df)
+    data.frame(moderator=x, subgroup=paste0("X=", z),
+               estimate=estimate, se=se,
+               ci_low=estimate-crit*se, ci_high=estimate+crit*se,
+               n_subgroup=sum(dat[[x]] == z, na.rm=TRUE))
+  })
+  bind_rows(out)
+}))
+kable(subgroup_effects, digits=4,
+      caption="Regression-implied subgroup name effects and 95% confidence intervals")
+```
+
+# Interpretation and comparison notes
+
+- A negative effect denotes a callback penalty for foreign-sounding names.
+- A positive interaction means the name penalty is **less negative** for $X=1$ than for $X=0$.
+- The three interaction regressions are separate pre-specified tests; the estimated subgroup effects are model-implied and conditional on the included main-effect controls and wave.
+- The causal forest comparison should report doubly robust subgroup ATEs with firm clustering, side by side with these regression estimates and confidence intervals. Neither method observes the true individual CATE.
+- Statistical significance of an interaction is not proof of a particular discrimination mechanism. In particular, gender differences need not arise from statistical discrimination.
+
+# Optional: joint interaction specification
+
+A joint model can be considered as a supplementary analysis, but is not required for the three primary ex-ante tests.
+
+```{r joint-model, eval=FALSE}
+joint <- lm_robust(
+  callback ~ D * (language_skills + extracurricular_skills + female) +
+    ba_quality + ma + exp_highquality + wave,
+  data=dat, clusters=firmid, se_type="CR2"
+)
+summary(joint)
+```
