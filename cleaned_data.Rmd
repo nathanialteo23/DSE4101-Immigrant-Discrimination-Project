@@ -87,4 +87,7 @@ print(table(df_int1$D))
 ```
 
 
+```{r}
+save(df_int1, file = "cleaned data.Rda")
+```
 

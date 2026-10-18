@@ -26,67 +26,18 @@ library(grf)
 library(knitr)
 
 
-data_path <- file.path("data", "oreopoulos-resume-study-replication-data-file.dta")
-if (!file.exists(data_path)) {
-  stop("Data file not found. Expected it at: ", normalizePath(data_path, mustWork = FALSE))
-}
-df <- read_dta(data_path)
 ```
 
 
 ```{r}
-vars <- c("type", "female", "ba_quality", "extracurricular_skills", "language_skills",
-          "ma", "same_exp", "exp_highquality", "reference", "accreditation", "legal")
+loaded_name <- load("cleaned data.Rda")
+print(loaded_name)
 
-df_int1 <- df %>%
-  filter(
-    type %in% c(0, 1),
-    name_ethnicity %in% c("Canada", "Chinese", "Indian", "Pakistani")
-  )
+df_int1 <- get(loaded_name)
 ```
 
 
-# Check for missing values across waves (fall_data)
 
-```{r}
-counts_all <- df_int1 %>%
-  mutate(across(all_of(vars), as.character)) %>%
-  pivot_longer(all_of(vars), names_to = "variable", values_to = "value") %>%
-  mutate(variable = factor(variable, levels = vars)) %>%
-  group_by(fall_data, variable) %>%
-  summarise(
-    with_value = sum(!is.na(value) & trimws(value) != ""),
-    empty      = sum(is.na(value) | trimws(value) == ""),
-    .groups = "drop"
-  ) %>%
-  left_join(df_int1 %>% count(fall_data, name = "total_rows"), by = "fall_data") %>%
-  relocate(total_rows, .after = fall_data) %>%
-  arrange(fall_data, variable)
-
-print(counts_all, n = Inf)
-```
-
-
-```{r}
-df_int1 <- df_int1 %>%
-  mutate(
-    D              = as.numeric(type == 1),   # 1 = foreign name (Type 1), 0 = Type 0 baseline
-    fall_data      = factor(fall_data),
-    female                 = ifelse(is.na(female), 0, female),
-    ba_quality              = ifelse(is.na(ba_quality), 0, ba_quality),
-    extracurricular_skills  = ifelse(is.na(extracurricular_skills), 0, extracurricular_skills),
-    language_skills         = ifelse(is.na(language_skills), 0, language_skills),
-    ma                      = ifelse(is.na(ma), 0, ma),
-    same_exp                = ifelse(is.na(same_exp), 0, same_exp),
-    exp_highquality         = ifelse(is.na(exp_highquality), 0, exp_highquality)
-    # Reference, accreditation, and legal variables are only available in some waves 
-    # (present only when fall_data == 2), so drop them to ensure consistency across waves.
-  )
-
-cat("Analysis sample size:", nrow(df_int1), "\n")
-cat("Treatment (D) distribution:\n")
-print(table(df_int1$D))
-```
 
 # Causal forest 1 (3 covariates)
 1. Cluster by firmid
