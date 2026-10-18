@@ -29,18 +29,111 @@ library(grf)
 library(knitr)
 ```
 
-```{r load-data}
+
 data_path <- file.path("data", "oreopoulos-resume-study-replication-data-file.dta")
 if (!file.exists(data_path)) {
-  stop("Data file not found. Expected it at: ",
-       normalizePath(data_path, mustWork = FALSE))
+  stop("Data file not found. Expected it at: ", normalizePath(data_path, mustWork = FALSE))
 }
 df <- read_dta(data_path)
 ```
 
-```{r analysis-sample}
-# Pre-treatment resume characteristics. Keep this order: grf picks split variables by
-# column position, so the forests only reproduce exactly with the same order.
+
+```{r}
+loaded_name <- load("cleaned data.Rda")
+print(loaded_name)
+
+df_int1 <- get(loaded_name)
+```
+
+
+
+
+# Causal forest 1 (3 covariates)
+1. Cluster by firmid
+2. X (Covariates): type, language, extracurricular, multinational
+3. Y: callback rate
+4. 
+```{r}
+set.seed(4101)  # For reproducibility
+forest1df_X <- df_int1 %>%
+  select(language_skills,extracurricular_skills,same_exp)%>%
+  as.matrix()
+
+forest1df_treatment <- df_int1$D %>% as.matrix()
+forest1df_cluster<-df_int1$firmid %>% as.matrix()
+forest1df_Y<-df_int1$callback %>% as.matrix()
+
+cf1<-causal_forest(forest1df_X,
+                   forest1df_Y,
+                   forest1df_treatment,
+                   clusters=forest1df_cluster)
+
+```
+
+
+
+## Overlap / propensity check
+
+Because name ethnicity is experimentally randomized within a job
+posting, the estimated propensity scores should cluster fairly tightly
+around the actual treatment share rather than displaying the extreme
+values that signal confounding.
+
+```{r overlap-check}
+hist(cf1$W.hat,
+     breaks = 30,
+     col = "#2c7fb8",
+     border = "white",
+     main = "Distribution of estimated propensity scores (W.hat)",
+     xlab = "P(foreign/ethnic name | X)")
+```
+
+## Average treatment effect
+
+```{r ate}
+ate <- average_treatment_effect(cf1, target.sample = "all")
+ate
+```
+
+```{r ate-print, results='asis'}
+cat(sprintf(
+  "**Estimated ATE:** having a foreign/ethnic-sounding name changes the callback probability by **%.3f** percentage points (SE = %.3f), on average across the analysis sample.\n",
+  100 * ate["estimate"], 100 * ate["std.err"]
+))
+```
+
+## Variable importance
+
+Which of the three moderators does the forest use most to split on
+(i.e., which one drives the most predictable heterogeneity)?
+
+```{r var-importance}
+vi <- variable_importance(cf1)
+vi_tab <- data.frame(
+  variable = colnames(forest1df_X),
+  importance = as.numeric(vi)
+) %>% arrange(desc(importance))
+
+kable(vi_tab, digits = 3, caption = "Causal forest variable importance")
+```
+
+
+
+
+# Causal forest 2 (ALL covariates)
+1. Cluster by firmid
+2. X (Covariates): ALL
+3. Y: callback rate
+4. 
+```{r}
+# TO ASK: MUST WE INCLUDE FALL_DATA?
+set.seed(4101)  # For reproducibility
+df_int1 <- df_int1 %>%
+  mutate(
+    fall_data = as.numeric(as.character(fall_data))
+  )  
+
+
 all_pretreat_cov <- c(
   "language_skills",
   "female",
@@ -51,62 +144,86 @@ all_pretreat_cov <- c(
   "exp_highquality"
 )
 
-# Keep Canadian-named (control) and Chinese/Indian/Pakistani-named (treated) resumes.
-df_filtered <- df %>%
-  filter(
-    type %in% c(0, 1),
-    name_ethnicity %in% c("Canada", "Chinese", "Indian", "Pakistani")
-  )
 
-# Characteristics that are missing in some waves are recoded to 0.
-# NB: same_exp is missing for every resume in wave 2 (see the missing-value check
-# below), so it is 0 for all of wave 2.
-# reference, accreditation and legal are only observed in wave 2, so they are not used.
-df_int1 <- df_filtered %>%
-  mutate(
-    # D: 1 = foreign name (type 1), 0 = Canadian name (type 0)
-    D = as.numeric(type == 1),
-    across(all_of(all_pretreat_cov), ~ ifelse(is.na(.x), 0, .x))
-  )
+all_pretreat_cov_fall <- c(
+  "language_skills",
+  "female",
+  "ba_quality",
+  "extracurricular_skills",
+  "ma",
+  "same_exp",
+  "exp_highquality",
+  "fall_data"
+)
 
-Y_all   <- as.numeric(df_int1$callback)   # outcome: callback
-W_all   <- df_int1$D                      # treatment: foreign-sounding name
-firm_id <- df_int1$firmid                 # cluster: employer
-waves   <- sort(unique(df_int1$fall_data))
+
+
+forest2df_X <- df_int1 %>%
+  select(all_of(all_pretreat_cov_fall))%>% 
+  as.matrix()
+
+forest2df_treatment <- df_int1$D %>% as.matrix()
+forest2df_cluster<-df_int1$firmid %>% as.matrix()
+forest2df_Y<-df_int1$callback %>% as.matrix()
+
+cf2<-causal_forest(forest2df_X,
+                   forest2df_Y,
+                   forest2df_treatment,
+                   clusters=forest2df_cluster)
+
 ```
 
-# Diagnostic tests
 
-These checks use the data only (no forest). For covariate balance and wave composition see `Causal Forest Balance Table.Rmd`.
+## Overlap / propensity check
 
-## Missing values across waves
+Because name ethnicity is experimentally randomized within a job
+posting, the estimated propensity scores should cluster fairly tightly
+around the actual treatment share rather than displaying the extreme
+values that signal confounding.
 
-Run on the filtered data before the recoding above, so it shows what is really missing.
-
-```{r missing-by-wave}
-vars <- c("type", "female", "ba_quality", "extracurricular_skills", "language_skills",
-          "ma", "same_exp", "exp_highquality", "reference", "accreditation", "legal")
-
-counts_all <- df_filtered %>%
-  mutate(across(all_of(vars), as.character)) %>%
-  pivot_longer(all_of(vars), names_to = "variable", values_to = "value") %>%
-  mutate(variable = factor(variable, levels = vars)) %>%
-  group_by(fall_data, variable) %>%
-  summarise(
-    with_value = sum(!is.na(value) & trimws(value) != ""),
-    empty      = sum(is.na(value) | trimws(value) == ""),
-    .groups = "drop"
-  ) %>%
-  left_join(df_filtered %>% count(fall_data, name = "total_rows"), by = "fall_data") %>%
-  relocate(total_rows, .after = fall_data) %>%
-  arrange(fall_data, variable)
-
-print(counts_all, n = Inf)
+```{r overlap-check forest 2}
+hist(cf2$W.hat,
+     breaks = 30,
+     col = "#2c7fb8",
+     border = "white",
+     main = "Distribution of estimated propensity scores (D.hat)",
+     xlab = "P(foreign/ethnic name | X)")
 ```
 
-## Sample and treatment coding
+## Average treatment effect
 
-```{r sanity-checks}
+```{r ate forest 2}
+ate <- average_treatment_effect(cf2, target.sample = "all")
+ate
+```
+
+```{r ate-print forest 2, results='asis'}
+cat(sprintf(
+  "**Estimated ATE:** having a foreign/ethnic-sounding name changes the callback probability by **%.3f** percentage points (SE = %.3f), on average across the analysis sample.\n",
+  100 * ate["estimate"], 100 * ate["std.err"]
+))
+```
+
+## Variable importance
+
+Which of the three moderators does the forest use most to split on
+(i.e., which one drives the most predictable heterogeneity)?
+
+```{r var-importance forest 2}
+vi <- variable_importance(cf2)
+vi_tab <- data.frame(
+  variable = colnames(forest2df_X),
+  importance = as.numeric(vi)
+) %>% arrange(desc(importance))
+
+kable(vi_tab, digits = 3, caption = "Causal forest variable importance")
+```
+
+## 0. Sanity checks on sample and treatment coding
+
+```{r val-sanity}
+library(estimatr)
+
 cat("N:", nrow(df_int1), "(expected 5,657)\n")
 cat("Firms:", length(unique(df_int1$firmid)), "\n")
 cat("Resumes per firm:\n")
