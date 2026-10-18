@@ -1,0 +1,157 @@
+---
+title: "Balance Table"
+subtitle: "Covariate balance and wave composition (companion to Causal Forest.Rmd)"
+output:
+  pdf_document:
+    toc: true
+    number_sections: true
+date: "`r Sys.Date()`"
+---
+
+```{r knitr-options, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+Balance checks for the causal forest sample. They do not depend on any forest, so they live here rather than in `Causal Forest.Rmd`. The sample and cleaning steps below are identical to the ones in that file.
+
+# Setup and data preparation
+
+```{r packages, message=FALSE, warning=FALSE}
+required_packages <- c("haven", "estimatr", "dplyr", "knitr")
+missing_packages  <- setdiff(required_packages, rownames(installed.packages()))
+if (length(missing_packages) > 0) {
+  install.packages(missing_packages, repos = "https://cloud.r-project.org")
+}
+library(haven)
+library(estimatr)
+library(dplyr)
+library(knitr)
+```
+
+```{r load-data}
+data_path <- file.path("data", "oreopoulos-resume-study-replication-data-file.dta")
+if (!file.exists(data_path)) {
+  stop("Data file not found. Expected it at: ",
+       normalizePath(data_path, mustWork = FALSE))
+}
+df <- read_dta(data_path)
+```
+
+```{r analysis-sample}
+# Pre-treatment resume characteristics
+all_pretreat_cov <- c(
+  "language_skills",
+  "female",
+  "ba_quality",
+  "extracurricular_skills",
+  "ma",
+  "same_exp",
+  "exp_highquality"
+)
+
+# Keep Canadian-named (control) and Chinese/Indian/Pakistani-named (treated) resumes.
+# Characteristics that are missing in some waves are recoded to 0.
+# NB: same_exp is missing for every resume in wave 2, so it is 0 for all of wave 2.
+# reference, accreditation and legal are only observed in wave 2, so they are not used.
+df_int1 <- df %>%
+  filter(
+    type %in% c(0, 1),
+    name_ethnicity %in% c("Canada", "Chinese", "Indian", "Pakistani")
+  ) %>%
+  mutate(
+    # D: 1 = foreign name (type 1), 0 = Canadian name (type 0)
+    D = as.numeric(type == 1),
+    across(all_of(all_pretreat_cov), ~ ifelse(is.na(.x), 0, .x))
+  )
+
+waves <- sort(unique(df_int1$fall_data))
+```
+
+# Covariate balance table
+
+SMD = (mean in D=1 minus mean in D=0) / sqrt((var in D=1 + var in D=0) / 2). Rule of thumb: |SMD| < 0.1 counts as balanced. The p-value is from a firm-clustered regression of the variable on D. Wave is a three-level code, so it enters as one dummy per wave rather than as a numeric code.
+
+```{r balance-table}
+smd <- function(x, d) {
+  (mean(x[d == 1]) - mean(x[d == 0])) /
+    sqrt((var(x[d == 1]) + var(x[d == 0])) / 2)
+}
+
+# One dummy per wave
+df_bal <- df_int1
+for (k in waves) df_bal[[paste0("wave_", k)]] <- as.numeric(df_bal$fall_data == k)
+
+bal_vars <- c(all_pretreat_cov, paste0("wave_", waves))
+
+balance_row <- function(v, dat) {
+  x <- as.numeric(dat[[v]])
+  p <- tryCatch({
+    fit <- lm_robust(as.formula(paste(v, "~ D")), data = dat,
+                     clusters = firmid, se_type = "CR2")
+    unname(fit$p.value["D"])
+  }, error = function(e) NA_real_)
+  # Percentages only make sense for 0/1 variables
+  is_bin <- all(x %in% c(0, 1))
+  data.frame(variable = v,
+             mean_D0  = mean(x[dat$D == 0]),
+             mean_D1  = mean(x[dat$D == 1]),
+             pct_D0   = if (is_bin) 100 * mean(x[dat$D == 0]) else NA_real_,
+             pct_D1   = if (is_bin) 100 * mean(x[dat$D == 1]) else NA_real_,
+             SMD      = smd(x, dat$D),
+             p_clustered = p)
+}
+
+bal_tab <- bind_rows(lapply(bal_vars, balance_row, dat = df_bal)) %>%
+  mutate(flag = ifelse(abs(SMD) >= 0.1, "check", ""))
+
+kable(bal_tab, digits = 3,
+      col.names = c("variable", "mean D=0", "mean D=1", "% D=0", "% D=1",
+                    "SMD", "p (clustered)", "flag"),
+      caption = paste("Balance of resume characteristics by name type",
+                      "(D = 1 foreign name); % columns shown for 0/1 variables"))
+```
+
+# Wave checks
+
+The balance table shows treated share differs a lot by wave. These two checks ask whether that is a composition issue (which name types were sampled in which wave) or a randomisation problem within wave. (Whether the name penalty itself differs by wave is checked in `Causal Forest.Rmd`.)
+
+## Wave composition
+
+```{r wave-composition}
+# Which name types appear in which wave?
+print(table(wave = df_int1$fall_data,
+            ethnicity = as.character(df_int1$name_ethnicity)))
+
+# Treatment share and callback rate by wave
+wave_tab <- df_int1 %>%
+  group_by(wave = fall_data) %>%
+  summarise(n = n(),
+            treated_share    = mean(D),
+            callback_rate_D0 = mean(as.numeric(callback)[D == 0]),
+            callback_rate_D1 = mean(as.numeric(callback)[D == 1]),
+            .groups = "drop")
+
+kable(wave_tab, digits = 3, caption = "Treatment share and callback rate by wave")
+```
+
+## Balance within wave
+
+```{r balance-within-wave}
+# Difference between name types after absorbing wave fixed effects
+within_row <- function(v) {
+  dat   <- df_int1
+  dat$x <- as.numeric(dat[[v]])
+  fit   <- lm_robust(x ~ D + factor(fall_data), data = dat,
+                     clusters = firmid, se_type = "CR2")
+  data.frame(variable         = v,
+             diff_D1_minus_D0 = unname(coef(fit)["D"]),
+             se               = unname(fit$std.error["D"]),
+             p_clustered      = unname(fit$p.value["D"]))
+}
+
+within_tab <- bind_rows(lapply(all_pretreat_cov, within_row))
+
+kable(within_tab, digits = 3,
+      caption = paste("Balance within wave (name-type difference,",
+                      "wave fixed effects, firm-clustered)"))
+```
