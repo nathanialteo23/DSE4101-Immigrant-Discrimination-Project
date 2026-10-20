@@ -98,6 +98,41 @@ kable(bind_rows(extract_D(ate_wave, "Wave-adjusted"),
       caption="Average name effect (foreign minus English name)")
 ```
 
+*Note*: The standard error (SE) reported above differs from that in Oreopoulos (2011) due to differences in the estimation method. Oreopoulos uses heteroskedasticity-robust (HC1) standard errors, whereas our analysis uses firm-clustered CR2 standard errors (SE = 0.00693) to account for potential within-firm dependence, since multiple resumes were submitted to the same employer. Both methods produce the same ATE estimate (-0.04434), with the difference in SE arising from the variance estimation method. The table below compares the results using HC1 and CR2, showing that HC1 reproduces Oreopoulos's reported SE of 0.009.
+
+```{r}
+
+#replicating exact Oreopoulos results using HC1 SE
+
+model_HC1 <- lm_robust(
+  callback ~ D + wave,
+  data = dat,
+  se_type = "HC1"
+)
+
+#the CR2 SE that we are using instead
+
+model_CR2 <- lm_robust(
+  callback ~ D + wave,
+  data = dat,
+  clusters = firmid,
+  se_type = "CR2"
+)
+
+# Compare treatment estimates and standard errors
+data.frame(
+  method = c("HC1", "CR2"),
+  estimate = c(coef(model_HC1)["D"],
+               coef(model_CR2)["D"]),
+  SE = c(model_HC1$std.error["D"],
+         model_CR2$std.error["D"])
+)
+
+```
+
+
+
+
 # Three ex-ante interaction regressions
 
 For each moderator $X$, we estimate:
