@@ -93,9 +93,25 @@ extract_D <- function(model, label) {
 }
 
 
-kable(bind_rows(extract_D(ate_wave, "Wave-adjusted"),
-                extract_D(ate_adjusted, "Wave + covariate adjusted")), digits=4,
-      caption="Average name effect (foreign minus English name)")
+
+ate_table <- bind_rows(
+  extract_D(ate_wave, "Wave-adjusted"),
+  extract_D(ate_adjusted, "Wave + covariate adjusted")
+) %>%
+  mutate(
+    p_value = ifelse(
+      p_value < 0.001,
+      "<0.001",
+      sprintf("%.4f", p_value)
+    )
+  )
+
+kable(
+  ate_table,
+  digits = 4,
+  caption = "Average name effect (foreign minus English name)"
+)
+
 ```
 
 *Note*: The standard error (SE) reported above differs from that in Oreopoulos (2011) due to differences in the estimation method. Oreopoulos uses heteroskedasticity-robust (HC1) standard errors, whereas our analysis uses firm-clustered CR2 standard errors (SE = 0.00693) to account for potential within-firm dependence, since multiple resumes were submitted to the same employer. Both methods produce the same ATE estimate (-0.04434), with the difference in SE arising from the variance estimation method. The table below compares the results using HC1 and CR2, showing that HC1 reproduces Oreopoulos's reported SE of 0.009.
@@ -180,6 +196,70 @@ interaction_table <- bind_rows(lapply(moderators, function(x) {
 
 kable(interaction_table, digits=4, caption="Ex-ante interaction coefficients (D x X)")
 ```
+*Note:* The estimates from our interaction regressions differ from those reported in Oreopoulos (2011, Table 5 Panel B) because they estimate different quantities using different regression specifications.
+
+Oreopoulos (2011, Table 5 Panel B) reports the effects of resume characteristics on callback rates from separate regressions for each resume type (effect of X for Type 0 and effect of X for Type 1). In contrast, our analysis pools Type 0 and Type 1 resumes and directly estimates the interaction between name treatment and each ex-ante moderator. This interaction represents the *difference* between the effects of X for Type 1 and Type 0 (effect of X for Type 1 - effect of X for Type 0), allowing us to directly test whether the immigrant-name penalty varies across each moderator.
+
+To verify this distinction, we replicate Oreopoulos's separate regressions for Types 0 and 1 and compare their coefficients with our pooled interaction estimates in the table below. The replication reproduces Oreopoulos's published coefficients to three decimal places.
+
+Our interaction coefficients are close to, but not identical to, the differences implied by Oreopoulos's results because the regression specifications differ. **Oreopoulos's separate regressions allow all covariate and wave effects to vary by resume type, whereas our pooled regressions interact only the selected moderator with treatment, holding the effects of other controls and wave constant across types.** For example, the difference in the extracurricular activities coefficients (0.023 - (-0.007) = 0.030) is close to our estimated interaction coefficient of 0.0307.
+
+```{r oreopoulos-comparison}
+# To replicate Oreopoulos's result, try to run separate regressions for Type 0 and Type 1.
+
+# Prepare a separate dataset for replication; deal with missing same_exp values
+dat_oreo <- dat %>%
+  mutate(same_exp = ifelse(is.na(same_exp), 0, same_exp))
+
+# Type 0: English-sounding names; note how the data is filtered to only have the samples where D == 0
+oreo_type0 <- lm_robust(
+  callback ~ female + ba_quality + extracurricular_skills +
+    language_skills + ma + same_exp + exp_highquality + wave,
+  data = filter(dat_oreo, D == 0),
+  se_type = "HC1"
+)
+
+# Type 1: Foreign-sounding names; note how the data is filtered to only have the samples where D == 1
+oreo_type1 <- lm_robust(
+  callback ~ female + ba_quality + extracurricular_skills +
+    language_skills + ma + same_exp + exp_highquality + wave,
+  data = filter(dat_oreo, D == 1),
+  se_type = "HC1"
+)
+
+# Pull coefficients into table for comparison
+
+oreo_comparison <- bind_rows(lapply(moderators, function(x) {
+
+  b0 <- unname(coef(oreo_type0)[x])
+  b1 <- unname(coef(oreo_type1)[x])
+
+  data.frame(
+    moderator = x,
+    oreo_type0 = b0,
+    oreo_type1 = b1,
+    difference = b1 - b0,
+    our_interaction = interaction_table$interaction[
+      interaction_table$moderator == x
+    ]
+  )
+}))
+
+knitr::kable(
+  oreo_comparison,
+  digits = 3,
+  col.names = c(
+    "Moderator",
+    "Oreopoulos Type 0",
+    "Oreopoulos Type 1",
+    "Type 1 - Type 0",
+    "Our interaction"
+  ),
+  caption = "Comparison with Oreopoulos (2011), Table 5 Panel B"
+)
+```
+
+
 
 # Regression-implied subgroup treatment effects
 
