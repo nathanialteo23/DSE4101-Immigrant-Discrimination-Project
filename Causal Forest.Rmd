@@ -61,7 +61,10 @@ all_pretreat_cov <- c(
 
 # The wave is saved as a factor; use a numeric code (0, 1, 2) so it can enter X.
 df_int1 <- df_int1 %>%
-  mutate(fall_data = as.numeric(as.character(fall_data)))
+  mutate(
+    wave_1 = as.integer(fall_data == 1),
+    wave_2 = as.integer(fall_data == 2)
+  )
 
 Y_all   <- as.numeric(df_int1$callback)   # outcome: callback
 W_all   <- as.numeric(df_int1$D)          # treatment: foreign-sounding name
@@ -154,8 +157,8 @@ moderators <- c("language_skills", "extracurricular_skills", "same_exp")
 
 covariate_sets <- list(
   "cf1 (3 moderators)"         = moderators,
-  "cf1w (3 moderators + wave)" = c(moderators, "fall_data"),
-  "cf2 (full covariates)"      = c(all_pretreat_cov, "fall_data")
+  "cf1w (3 moderators + wave)" = c(moderators, "wave_1","wave_2"),
+  "cf2 (full covariates)"      = c(all_pretreat_cov, "wave_1","wave_2")
 )
 
 # Short labels (cf1, cf1w, cf2) for the wide validation tables further down
