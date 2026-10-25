@@ -11,7 +11,7 @@ date: "2026-09-30"
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
-This document runs in four stages: **diagnostic tests** on the sample, **causal forests** (fit and overlap check), **causal forest results** (ATE, variable importance, estimated effects) and **validation** of those results (calibration, RATE/TOC, combined verdict, tuning robustness). Covariate balance does not depend on any forest, so it lives in a separate file: `Causal Forest Balance Table.Rmd`. Both files read the analysis sample saved by `cleaned_data.Rmd` (`cleaned data.Rda`), so knit that one first.
+This document runs in four stages: **diagnostic tests** on the sample, **causal forests** (fit and overlap check), **causal forest results** (ATE, estimated effects) and **validation** of those results (calibration, RATE/TOC, combined verdict, tuning robustness). Covariate balance does not depend on any forest, so it lives in a separate file: `Causal Forest Balance Table.Rmd`. Both files read the analysis sample saved by `cleaned_data.Rmd` (`cleaned data.Rda`), so knit that one first.
 
 # Setup and data preparation
 
@@ -145,23 +145,20 @@ kable(ate_wave, digits = 2,
 
 All three forests use the same outcome (callback), treatment (D, foreign-sounding name) and clustering (firmid). They differ only in the covariates X:
 
-- **cf1**: three moderators (language skills, extracurricular skills, multinational experience).
 - **cf1w**: the three moderators plus the wave indicator, so it is the like-for-like comparison with the wave-adjusted regressions.
 - **cf2**: all pre-treatment covariates plus the wave indicator.
 
 All three are validated and reported; none is picked after the fact. same_exp is NA for all of wave 2 and is passed to grf as is (grf handles missing covariate values natively).
 
 ```{r forest-specs}
-# TO ASK: MUST WE INCLUDE FALL_DATA?
 moderators <- c("language_skills", "extracurricular_skills", "same_exp")
 
 covariate_sets <- list(
-  "cf1 (3 moderators)"         = moderators,
   "cf1w (3 moderators + wave)" = c(moderators, "wave_1","wave_2"),
   "cf2 (full covariates)"      = c(all_pretreat_cov, "wave_1","wave_2")
 )
 
-# Short labels (cf1, cf1w, cf2) for the wide validation tables further down
+# Short labels (cf1w, cf2) for the wide validation tables further down
 short_name <- function(x) sub(" .*", "", x)
 ```
 
@@ -178,7 +175,7 @@ fit_forest <- function(vars) {
 
 forests <- lapply(covariate_sets, fit_forest)
 
-cf1   <- forests[["cf1 (3 moderators)"]]$cf
+cf1w   <- forests[["cf1w (3 moderators + wave)"]]$cf
 cf2   <- forests[["cf2 (full covariates)"]]$cf
 X_cf2 <- forests[["cf2 (full covariates)"]]$X
 ```
@@ -224,20 +221,6 @@ for (i in seq_len(nrow(ate_tab))) {
 }
 ```
 
-## Variable importance
-
-Which covariates does each forest use most to split on (i.e., which ones drive the most predictable heterogeneity)?
-
-```{r var-importance}
-vi_tab <- bind_rows(lapply(names(forests), function(nm) {
-  data.frame(forest     = nm,
-             variable   = colnames(forests[[nm]]$X),
-             importance = as.numeric(variable_importance(forests[[nm]]$cf)))
-})) %>%
-  arrange(factor(forest, levels = names(forests)), desc(importance))
-
-kable(vi_tab, digits = 3, caption = "Causal forest variable importance")
-```
 
 ## Estimated effects (CATE)
 
@@ -318,18 +301,18 @@ blp <- best_linear_projection(cf2, X_cf2, subset = which(complete.cases(X_cf2)))
 print(blp)
 ```
 
-### Predicted effect by covariate cell (cf1)
+### Predicted effect by covariate cell (cf1w)
 
-cf1 has only a few distinct covariate combinations, so show them directly (same_exp = NA is wave 2).
+cf1w has only a few distinct covariate combinations, so show them directly (same_exp = NA is wave 2).
 
-```{r cate-cf1-cells}
-cf1_cells <- df_int1 %>%
-  mutate(tau_hat = predict(cf1)$predictions) %>%
+```{r cate-cf1w-cells}
+cf1w_cells <- df_int1 %>%
+  mutate(tau_hat = predict(cf1w)$predictions) %>%
   group_by(language_skills, extracurricular_skills, same_exp) %>%
   summarise(n = n(), effect_pp = 100 * mean(tau_hat), .groups = "drop") %>%
   arrange(effect_pp)
 
-kable(cf1_cells, digits = 2, caption = "cf1: predicted effect by covariate cell (pp)")
+kable(cf1w_cells, digits = 2, caption = "cf1w: predicted effect by covariate cell (pp)")
 ```
 
 # Validation of causal forest results
