@@ -1,6 +1,9 @@
 ---
 title: "causal forest"
 output:
+  html_document:
+    toc: true
+    df_print: paged
   pdf_document:
     toc: true
     number_sections: true
@@ -11,7 +14,7 @@ date: "2026-09-30"
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
-This document runs in four stages: **diagnostic tests** on the sample, **causal forests** (fit and overlap check), **causal forest results** (ATE, variable importance, estimated effects) and **validation** of those results (calibration, RATE/TOC, combined verdict, tuning robustness). Covariate balance does not depend on any forest, so it lives in a separate file: `Causal Forest Balance Table.Rmd`. Both files read the analysis sample saved by `cleaned_data.Rmd` (`cleaned data.Rda`), so knit that one first.
+This document runs in four stages: **diagnostic tests** on the sample, **causal forests** (fit and overlap check), **causal forest results** (ATE, estimated effects) and **validation** of those results (calibration, RATE/TOC, combined verdict, tuning robustness). Covariate balance does not depend on any forest, so it lives in a separate file: `Causal Forest Balance Table.Rmd`. Both files read the analysis sample saved by `cleaned_data.Rmd` (`cleaned data.Rda`), so knit that one first.
 
 # Setup and data preparation
 
@@ -145,23 +148,20 @@ kable(ate_wave, digits = 2,
 
 All three forests use the same outcome (callback), treatment (D, foreign-sounding name) and clustering (firmid). They differ only in the covariates X:
 
-- **cf1**: three moderators (language skills, extracurricular skills, multinational experience).
 - **cf1w**: the three moderators plus the wave indicator, so it is the like-for-like comparison with the wave-adjusted regressions.
 - **cf2**: all pre-treatment covariates plus the wave indicator.
 
 All three are validated and reported; none is picked after the fact. same_exp is NA for all of wave 2 and is passed to grf as is (grf handles missing covariate values natively).
 
 ```{r forest-specs}
-# TO ASK: MUST WE INCLUDE FALL_DATA?
 moderators <- c("language_skills", "extracurricular_skills", "same_exp")
 
 covariate_sets <- list(
-  "cf1 (3 moderators)"         = moderators,
   "cf1w (3 moderators + wave)" = c(moderators, "wave_1","wave_2"),
   "cf2 (full covariates)"      = c(all_pretreat_cov, "wave_1","wave_2")
 )
 
-# Short labels (cf1, cf1w, cf2) for the wide validation tables further down
+# Short labels (cf1w, cf2) for the wide validation tables further down
 short_name <- function(x) sub(" .*", "", x)
 ```
 
@@ -178,7 +178,7 @@ fit_forest <- function(vars) {
 
 forests <- lapply(covariate_sets, fit_forest)
 
-cf1   <- forests[["cf1 (3 moderators)"]]$cf
+cf1w   <- forests[["cf1w (3 moderators + wave)"]]$cf
 cf2   <- forests[["cf2 (full covariates)"]]$cf
 X_cf2 <- forests[["cf2 (full covariates)"]]$X
 ```
@@ -187,13 +187,46 @@ X_cf2 <- forests[["cf2 (full covariates)"]]$X
 
 Because name ethnicity is experimentally randomized within a job posting, the estimated propensity scores (`W.hat`) should cluster fairly tightly around the actual treatment share rather than displaying the extreme values that signal confounding.
 
-```{r overlap-check, fig.height=3.5}
-par(mfrow = c(1, 3))
+```{r overlap-check, fig.height=5.5}
+# par(mfrow = c(1, 3))
+# for (nm in names(forests)) {
+#   hist(forests[[nm]]$cf$W.hat, breaks = 30, col = "#2c7fb8", border = "white",
+#        main = nm, cex.main = 0.9, xlab = "Estimated P(foreign name | X)")
+# }
+# par(mfrow = c(1, 1))
+
+# Observed treatment proportion
+p_actual <- 2631 / (2631 + 3026)
+
+par(mfrow = c(1, 2))
+
 for (nm in names(forests)) {
-  hist(forests[[nm]]$cf$W.hat, breaks = 30, col = "#2c7fb8", border = "white",
-       main = nm, cex.main = 0.9, xlab = "Estimated P(foreign name | X)")
+  hist(forests[[nm]]$cf$W.hat,
+       breaks = 30,
+       col = "#2c7fb8",
+       border = "white",
+       main = nm,
+       cex.main = 0.9,
+       xlab = "Estimated P(foreign name | X)",
+       xlim = x_lim,
+       ylim = c(0, 800))
+
+  # Vertical dotted line
+  abline(v = p_actual, col = "red", lty = 2, lwd = 2)
+
+  # Legend
+  legend("topright",
+         legend = " Observed treatment proportion",
+         col = "red",
+         lty = 0,
+         lwd = 2,
+         bty = "n",
+         cex = 0.75)
 }
+
 par(mfrow = c(1, 1))
+
+
 ```
 
 # Causal forest results
@@ -224,20 +257,6 @@ for (i in seq_len(nrow(ate_tab))) {
 }
 ```
 
-## Variable importance
-
-Which covariates does each forest use most to split on (i.e., which ones drive the most predictable heterogeneity)?
-
-```{r var-importance}
-vi_tab <- bind_rows(lapply(names(forests), function(nm) {
-  data.frame(forest     = nm,
-             variable   = colnames(forests[[nm]]$X),
-             importance = as.numeric(variable_importance(forests[[nm]]$cf)))
-})) %>%
-  arrange(factor(forest, levels = names(forests)), desc(importance))
-
-kable(vi_tab, digits = 3, caption = "Causal forest variable importance")
-```
 
 ## Estimated effects (CATE)
 
@@ -245,7 +264,7 @@ The forest's own output: a predicted treatment effect for every resume. Read the
 
 ### Distribution of predicted effects
 
-```{r cate-distribution, fig.height=3.5}
+```{r cate-distribution, fig.height=5.8}
 # Out-of-bag predictions: each resume is predicted by trees that never saw it
 cate_df <- bind_rows(lapply(names(forests), function(nm) {
   p <- predict(forests[[nm]]$cf, estimate.variance = TRUE)
@@ -269,11 +288,31 @@ cate_summary <- cate_df %>%
 kable(cate_summary, digits = 2,
       caption = "Distribution of predicted treatment effects (pp, out-of-bag)")
 
-par(mfrow = c(1, 3))
+# par(mfrow = c(1, 3))
+# for (nm in names(forests)) {
+#   tau_pp <- 100 * cate_df$tau_hat[cate_df$forest == nm]
+#   hist(tau_pp, breaks = 30, col = "#2c7fb8", border = "white", main = nm,
+#        xlab = "Predicted effect of foreign name (pp)")
+#   abline(v = mean(tau_pp), lty = 2)
+# }
+# par(mfrow = c(1, 1))
+
+# Common x-axis and bin boundaries
+x_lim <- range(100 * cate_df$tau_hat)
+common_breaks <- seq(floor(x_lim[1]), ceiling(x_lim[2]), length.out = 31)
+
+# Common y-axis
+max_freq <- max(sapply(split(100 * cate_df$tau_hat, cate_df$forest),
+                       function(x) max(hist(x, breaks = common_breaks, plot = FALSE)$counts)))
+y_lim <- c(0, ceiling(max_freq / 100) * 100)
+
+# Plot
+par(mfrow = c(1, 2))
 for (nm in names(forests)) {
   tau_pp <- 100 * cate_df$tau_hat[cate_df$forest == nm]
-  hist(tau_pp, breaks = 30, col = "#2c7fb8", border = "white", main = nm,
-       xlab = "Predicted effect of foreign name (pp)")
+  hist(tau_pp, breaks = common_breaks, col = "#2c7fb8", border = "white",
+       main = nm, xlab = "Predicted effect of foreign name (pp)",
+       xlim = range(common_breaks), ylim = y_lim)
   abline(v = mean(tau_pp), lty = 2)
 }
 par(mfrow = c(1, 1))
@@ -318,18 +357,18 @@ blp <- best_linear_projection(cf2, X_cf2, subset = which(complete.cases(X_cf2)))
 print(blp)
 ```
 
-### Predicted effect by covariate cell (cf1)
+### Predicted effect by covariate cell (cf1w)
 
-cf1 has only a few distinct covariate combinations, so show them directly (same_exp = NA is wave 2).
+cf1w has only a few distinct covariate combinations, so show them directly (same_exp = NA is wave 2).
 
-```{r cate-cf1-cells}
-cf1_cells <- df_int1 %>%
-  mutate(tau_hat = predict(cf1)$predictions) %>%
+```{r cate-cf1w-cells}
+cf1w_cells <- df_int1 %>%
+  mutate(tau_hat = predict(cf1w)$predictions) %>%
   group_by(language_skills, extracurricular_skills, same_exp) %>%
   summarise(n = n(), effect_pp = 100 * mean(tau_hat), .groups = "drop") %>%
   arrange(effect_pp)
 
-kable(cf1_cells, digits = 2, caption = "cf1: predicted effect by covariate cell (pp)")
+kable(cf1w_cells, digits = 2, caption = "cf1w: predicted effect by covariate cell (pp)")
 ```
 
 # Validation of causal forest results
