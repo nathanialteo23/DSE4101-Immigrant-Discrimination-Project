@@ -125,3 +125,13 @@ print(balance_table, n = Inf)
 ```
 
 
+# Save dataset
+```{r}
+# Save the corrected dataset
+save(df_int1, file = "cleaned data.Rda")
+
+cat("Dataset successfully updated!\n")
+cat("Observations:", nrow(df_int1), "\n")
+cat("Variables:", ncol(df_int1), "\n")
+```
+
