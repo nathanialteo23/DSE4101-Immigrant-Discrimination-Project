@@ -93,3 +93,45 @@ print(table(df_int1$D))
 
 
 
+# Check for missing values across waves (fall_data)
+
+```{r}
+vars_no_fall <- setdiff(vars, "fall_data")
+
+# N with a non-empty value, by variable and wave
+counts_long <- df_int1 %>%
+  mutate(across(all_of(vars_no_fall), as.character)) %>%
+  pivot_longer(all_of(vars_no_fall), names_to = "variable", values_to = "value") %>%
+  group_by(fall_data, variable) %>%
+  summarise(n = sum(!is.na(value) & trimws(value) != ""), .groups = "drop")
+
+# Total rows per wave, shown as the first row of the table
+total_rows <- df_int1 %>%
+  count(fall_data, name = "n") %>%
+  mutate(variable = "Total rows")
+
+balance_table <- bind_rows(total_rows, counts_long) %>%
+  mutate(variable = factor(variable, levels = c("Total rows", vars_no_fall))) %>%
+  arrange(variable) %>%
+  pivot_wider(
+    names_from   = fall_data,
+    values_from  = n,
+    names_prefix = "Wave ",
+    names_sort   = TRUE
+  ) %>%
+  mutate(Total = rowSums(across(starts_with("Wave "))))
+
+print(balance_table, n = Inf)
+```
+
+
+# Save dataset
+```{r}
+# Save the corrected dataset
+save(df_int1, file = "cleaned data.Rda")
+
+cat("Dataset successfully updated!\n")
+cat("Observations:", nrow(df_int1), "\n")
+cat("Variables:", ncol(df_int1), "\n")
+```
+
