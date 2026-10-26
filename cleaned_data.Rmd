@@ -36,7 +36,40 @@ df <- read_dta(data_path)
 
 ```{r}
 vars <- c("type", "female", "ba_quality", "extracurricular_skills", "language_skills",
-          "ma", "same_exp", "exp_highquality", "reference", "accreditation", "legal")
+          "ma", "same_exp", "exp_highquality", "reference", "accreditation", "legal",
+          "fall_data")
+
+# Variables excluded from `vars` and reasons:
+# 1. Ethnicity and name variables [name_ethnicity, name, chinese, indian, british, 
+#    pakistani, chn_cdn]:
+#    We are interested in the effect of having a foreign name on callback, rather 
+#    than differences across specific ethnicities.
+#    These variables identify specific names or ethnic groups and are not
+#    needed for our main analysis.
+#
+# 2. Firm and occupation variables [firmid, city, 
+#    additional_credential,occupation_type, skillspeaking, skillsocialper,
+#    skillwriting]:
+#    Our research question is about heterogeneity across resume
+#    characteristics, but these variables describe the firm or job posting,
+#    not the resume.
+#
+# 3. listedaccreditation, certificate:
+#    No definition found in the paper or README file, so we could not confirm what they
+#    measure or whether they are pre-treatment. Excluded to avoid including variables 
+#    with unclear meaning.
+#
+# 4. Other callback-related outcomes [interview, second_callback]:
+#    These variables are excluded because our outcome of interest is callback.
+#    interview indicates whether the callback specifically mentioned an
+#    interview, while second_callback indicates whether the resume received
+#    two callbacks. Including these post-treatment variables as predictors could       #    introduce outcome leakage because they describe aspects of the callback outcome
+#    rather than characteristics known independently of it.
+
+```
+
+```{r}
+length(vars)
 
 df_int1 <- df %>%
   filter(
@@ -46,40 +79,12 @@ df_int1 <- df %>%
 ```
 
 
-# Check for missing values across waves (fall_data)
-
-```{r}
-counts_all <- df_int1 %>%
-  mutate(across(all_of(vars), as.character)) %>%
-  pivot_longer(all_of(vars), names_to = "variable", values_to = "value") %>%
-  mutate(variable = factor(variable, levels = vars)) %>%
-  group_by(fall_data, variable) %>%
-  summarise(
-    with_value = sum(!is.na(value) & trimws(value) != ""),
-    empty      = sum(is.na(value) | trimws(value) == ""),
-    .groups = "drop"
-  ) %>%
-  left_join(df_int1 %>% count(fall_data, name = "total_rows"), by = "fall_data") %>%
-  relocate(total_rows, .after = fall_data) %>%
-  arrange(fall_data, variable)
-
-print(counts_all, n = Inf)
-```
-
-
 ```{r}
 df_int1 <- df_int1 %>%
   mutate(
     D = as.integer(type == 1), # 1 = foreign name (Type 1), 0 = Type 0 baseline
-    fall_data = factor(fall_data)
-  ) %>%
-  select(
-    -reference,
-    -accreditation,
-    -legal
-    # Reference, accreditation, and legal variables are only available in some waves 
-    # (present only when fall_data == 2), so drop them to ensure consistency across waves.
-  )
+    fall_data = factor(fall_data) # Treats wave as a category rather than a continuous numerical variable
+  ) 
 
 cat("Analysis sample size:", nrow(df_int1), "\n")
 cat("Treatment (D) distribution:\n")
@@ -87,7 +92,46 @@ print(table(df_int1$D))
 ```
 
 
+
+# Check for missing values across waves (fall_data)
+
 ```{r}
+vars_no_fall <- setdiff(vars, "fall_data")
+
+# N with a non-empty value, by variable and wave
+counts_long <- df_int1 %>%
+  mutate(across(all_of(vars_no_fall), as.character)) %>%
+  pivot_longer(all_of(vars_no_fall), names_to = "variable", values_to = "value") %>%
+  group_by(fall_data, variable) %>%
+  summarise(n = sum(!is.na(value) & trimws(value) != ""), .groups = "drop")
+
+# Total rows per wave, shown as the first row of the table
+total_rows <- df_int1 %>%
+  count(fall_data, name = "n") %>%
+  mutate(variable = "Total rows")
+
+balance_table <- bind_rows(total_rows, counts_long) %>%
+  mutate(variable = factor(variable, levels = c("Total rows", vars_no_fall))) %>%
+  arrange(variable) %>%
+  pivot_wider(
+    names_from   = fall_data,
+    values_from  = n,
+    names_prefix = "Wave ",
+    names_sort   = TRUE
+  ) %>%
+  mutate(Total = rowSums(across(starts_with("Wave "))))
+
+print(balance_table, n = Inf)
+```
+
+
+# Save dataset
+```{r}
+# Save the corrected dataset
 save(df_int1, file = "cleaned data.Rda")
+
+cat("Dataset successfully updated!\n")
+cat("Observations:", nrow(df_int1), "\n")
+cat("Variables:", ncol(df_int1), "\n")
 ```
 
