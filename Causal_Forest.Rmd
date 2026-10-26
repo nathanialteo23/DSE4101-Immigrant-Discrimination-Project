@@ -1,6 +1,9 @@
 ---
 title: "causal forest"
 output:
+  html_document:
+    toc: true
+    df_print: paged
   pdf_document:
     toc: true
     number_sections: true
@@ -184,13 +187,46 @@ X_cf2 <- forests[["cf2 (full covariates)"]]$X
 
 Because name ethnicity is experimentally randomized within a job posting, the estimated propensity scores (`W.hat`) should cluster fairly tightly around the actual treatment share rather than displaying the extreme values that signal confounding.
 
-```{r overlap-check, fig.height=3.5}
-par(mfrow = c(1, 3))
+```{r overlap-check, fig.height=5.5}
+# par(mfrow = c(1, 3))
+# for (nm in names(forests)) {
+#   hist(forests[[nm]]$cf$W.hat, breaks = 30, col = "#2c7fb8", border = "white",
+#        main = nm, cex.main = 0.9, xlab = "Estimated P(foreign name | X)")
+# }
+# par(mfrow = c(1, 1))
+
+# Observed treatment proportion
+  p_actual <- 2631 / (2631 + 3026)
+
+par(mfrow = c(1, 2))
+
 for (nm in names(forests)) {
-  hist(forests[[nm]]$cf$W.hat, breaks = 30, col = "#2c7fb8", border = "white",
-       main = nm, cex.main = 0.9, xlab = "Estimated P(foreign name | X)")
+  hist(forests[[nm]]$cf$W.hat,
+       breaks = 30,
+       col = "#2c7fb8",
+       border = "white",
+       main = nm,
+       cex.main = 0.9,
+       xlab = "Estimated P(foreign name | X)",
+       xlim = x_lim,
+       ylim = c(0, 800))
+
+  # Vertical dotted line
+  abline(v = p_actual, col = "red", lty = 2, lwd = 2)
+
+  # Legend
+  legend("topright",
+         legend = " Observed treatment proportion",
+         col = "red",
+         lty = 0,
+         lwd = 2,
+         bty = "n",
+         cex = 0.75)
 }
+
 par(mfrow = c(1, 1))
+
+
 ```
 
 # Causal forest results
