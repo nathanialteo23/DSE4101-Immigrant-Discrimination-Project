@@ -1,6 +1,6 @@
 ---
 title: "Balance Table"
-subtitle: "Covariate balance and wave composition (companion to Causal Forest.Rmd)"
+subtitle: "Covariate balance and wave composition (companion to Causal_Forest.Rmd)"
 output:
   pdf_document:
     toc: true
@@ -12,7 +12,7 @@ date: "`r Sys.Date()`"
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
-Balance checks for the causal forest sample. They do not depend on any forest, so they live here rather than in `Causal Forest.Rmd`. Both files read the analysis sample saved by `cleaned_data.Rmd` (`cleaned data.Rda`), so knit that one first.
+Balance checks for the causal forest sample. They do not depend on any forest, so they live here rather than in `Causal_Forest.Rmd`. Both files read the analysis sample saved by `cleaned_data.Rmd` (`cleaned data.Rda`), so knit that one first.
 
 # Setup and data preparation
 
@@ -113,7 +113,7 @@ kable(bal_tab, digits = 3,
 
 # Wave checks
 
-The balance table shows treated share differs a lot by wave. These two checks ask whether that is a composition issue (which name types were sampled in which wave) or a randomisation problem within wave. (Whether the name penalty itself differs by wave is checked in `Causal Forest.Rmd`.)
+The balance table shows treated share differs a lot by wave. These two checks ask whether that is a composition issue (which name types were sampled in which wave) or a randomisation problem within wave. (Whether the name penalty itself differs by wave is checked in `Causal_Forest.Rmd`.)
 
 ## Wave composition
 
