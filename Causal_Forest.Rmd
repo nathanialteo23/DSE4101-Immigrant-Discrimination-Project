@@ -196,7 +196,7 @@ Because name ethnicity is experimentally randomized within a job posting, the es
 # par(mfrow = c(1, 1))
 
 # Observed treatment proportion
-  p_actual <- 2631 / (2631 + 3026)
+p_actual <- 2631 / (2631 + 3026)
 
 par(mfrow = c(1, 2))
 
@@ -264,7 +264,7 @@ The forest's own output: a predicted treatment effect for every resume. Read the
 
 ### Distribution of predicted effects
 
-```{r cate-distribution, fig.height=3.5}
+```{r cate-distribution, fig.height=5.8}
 # Out-of-bag predictions: each resume is predicted by trees that never saw it
 cate_df <- bind_rows(lapply(names(forests), function(nm) {
   p <- predict(forests[[nm]]$cf, estimate.variance = TRUE)
@@ -288,11 +288,31 @@ cate_summary <- cate_df %>%
 kable(cate_summary, digits = 2,
       caption = "Distribution of predicted treatment effects (pp, out-of-bag)")
 
-par(mfrow = c(1, 3))
+# par(mfrow = c(1, 3))
+# for (nm in names(forests)) {
+#   tau_pp <- 100 * cate_df$tau_hat[cate_df$forest == nm]
+#   hist(tau_pp, breaks = 30, col = "#2c7fb8", border = "white", main = nm,
+#        xlab = "Predicted effect of foreign name (pp)")
+#   abline(v = mean(tau_pp), lty = 2)
+# }
+# par(mfrow = c(1, 1))
+
+# Common x-axis and bin boundaries
+x_lim <- range(100 * cate_df$tau_hat)
+common_breaks <- seq(floor(x_lim[1]), ceiling(x_lim[2]), length.out = 31)
+
+# Common y-axis
+max_freq <- max(sapply(split(100 * cate_df$tau_hat, cate_df$forest),
+                       function(x) max(hist(x, breaks = common_breaks, plot = FALSE)$counts)))
+y_lim <- c(0, ceiling(max_freq / 100) * 100)
+
+# Plot
+par(mfrow = c(1, 2))
 for (nm in names(forests)) {
   tau_pp <- 100 * cate_df$tau_hat[cate_df$forest == nm]
-  hist(tau_pp, breaks = 30, col = "#2c7fb8", border = "white", main = nm,
-       xlab = "Predicted effect of foreign name (pp)")
+  hist(tau_pp, breaks = common_breaks, col = "#2c7fb8", border = "white",
+       main = nm, xlab = "Predicted effect of foreign name (pp)",
+       xlim = range(common_breaks), ylim = y_lim)
   abline(v = mean(tau_pp), lty = 2)
 }
 par(mfrow = c(1, 1))
