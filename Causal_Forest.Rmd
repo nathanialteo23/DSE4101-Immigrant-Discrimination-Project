@@ -52,7 +52,10 @@ all_pretreat_cov <- c(
   "extracurricular_skills",
   "ma",
   "same_exp",
-  "exp_highquality"
+  "exp_highquality",
+  "reference", 
+  "accreditation",
+  "legal"
 )
 
 # df_int1 comes from cleaned_data.Rmd: Canadian-named (control) and Chinese/Indian/
@@ -79,12 +82,13 @@ waves   <- sort(unique(df_int1$fall_data))
 
 These checks use the data only (no forest). For covariate balance and wave composition see `Causal Forest Balance Table.Rmd`.
 
+
 ## Missing values across waves
 
 The cleaned data keeps missing values as they are, so this shows what is really missing: only same_exp has gaps (all of wave 2).
 
 ```{r missing-by-wave}
-vars <- c("type", all_pretreat_cov)
+vars <- c(all_pretreat_cov)
 
 counts_all <- df_int1 %>%
   mutate(across(all_of(vars), as.character)) %>%
@@ -165,6 +169,8 @@ covariate_sets <- list(
 short_name <- function(x) sub(" .*", "", x)
 ```
 
+
+
 ## Fit
 
 ```{r fit-forests}
@@ -199,6 +205,14 @@ Because name ethnicity is experimentally randomized within a job posting, the es
 p_actual <- 2631 / (2631 + 3026)
 
 par(mfrow = c(1, 2))
+
+
+
+propensity_values <- unlist(
+  lapply(forests, function(f) f$cf$W.hat)
+)
+
+x_lim <- range(propensity_values, na.rm = TRUE)
 
 for (nm in names(forests)) {
   hist(forests[[nm]]$cf$W.hat,
@@ -265,56 +279,95 @@ The forest's own output: a predicted treatment effect for every resume. Read the
 ### Distribution of predicted effects
 
 ```{r cate-distribution, fig.height=5.8}
-# Out-of-bag predictions: each resume is predicted by trees that never saw it
+# Exploratory distribution of out-of-bag predicted treatment effects.
+# These distributions describe forest predictions and do not, by
+# themselves, establish statistically significant heterogeneity.
+
+# Obtain out-of-bag CATE predictions from both forests
 cate_df <- bind_rows(lapply(names(forests), function(nm) {
   p <- predict(forests[[nm]]$cf, estimate.variance = TRUE)
-  data.frame(forest  = nm,
-             tau_hat = p$predictions,
-             tau_se  = sqrt(p$variance.estimates))
+
+  data.frame(
+    forest = nm,
+    tau_hat = p$predictions,
+    tau_se = sqrt(p$variance.estimates)
+  )
 }))
 
+# Summarise predicted CATE distributions in percentage points
 cate_summary <- cate_df %>%
   group_by(forest) %>%
-  summarise(mean_pp    = 100 * mean(tau_hat),
-            sd_pp      = 100 * sd(tau_hat),
-            min_pp     = 100 * min(tau_hat),
-            p25_pp     = 100 * quantile(tau_hat, .25),
-            median_pp  = 100 * median(tau_hat),
-            p75_pp     = 100 * quantile(tau_hat, .75),
-            max_pp     = 100 * max(tau_hat),
-            mean_se_pp = 100 * mean(tau_se),
-            .groups = "drop")
+  summarise(
+    mean_pp = 100 * mean(tau_hat),
+    sd_pp = 100 * sd(tau_hat),
+    min_pp = 100 * min(tau_hat),
+    p25_pp = 100 * quantile(tau_hat, 0.25),
+    median_pp = 100 * median(tau_hat),
+    p75_pp = 100 * quantile(tau_hat, 0.75),
+    max_pp = 100 * max(tau_hat),
+    mean_se_pp = 100 * mean(tau_se),
+    .groups = "drop"
+  )
 
-kable(cate_summary, digits = 2,
-      caption = "Distribution of predicted treatment effects (pp, out-of-bag)")
+kable(
+  cate_summary,
+  digits = 2,
+  caption = "Distribution of predicted treatment effects (pp, out-of-bag)"
+)
 
-# par(mfrow = c(1, 3))
-# for (nm in names(forests)) {
-#   tau_pp <- 100 * cate_df$tau_hat[cate_df$forest == nm]
-#   hist(tau_pp, breaks = 30, col = "#2c7fb8", border = "white", main = nm,
-#        xlab = "Predicted effect of foreign name (pp)")
-#   abline(v = mean(tau_pp), lty = 2)
-# }
-# par(mfrow = c(1, 1))
+# Calculate x-axis limits using CATE predictions, not propensity scores
+cate_values <- 100 * cate_df$tau_hat
 
-# Common x-axis and bin boundaries
-x_lim <- range(100 * cate_df$tau_hat)
-common_breaks <- seq(floor(x_lim[1]), ceiling(x_lim[2]), length.out = 31)
+cate_xlim <- range(cate_values, na.rm = TRUE)
 
-# Common y-axis
-max_freq <- max(sapply(split(100 * cate_df$tau_hat, cate_df$forest),
-                       function(x) max(hist(x, breaks = common_breaks, plot = FALSE)$counts)))
-y_lim <- c(0, ceiling(max_freq / 100) * 100)
+# Use common bin boundaries that cover all CATE predictions
+cate_breaks <- seq(
+  floor(cate_xlim[1]),
+  ceiling(cate_xlim[2]),
+  length.out = 31
+)
 
-# Plot
+# Calculate a common y-axis limit across both forests
+max_freq <- max(sapply(
+  split(cate_values, cate_df$forest),
+  function(x) {
+    max(hist(
+      x,
+      breaks = cate_breaks,
+      plot = FALSE
+    )$counts)
+  }
+))
+
+cate_ylim <- c(0, max(1, ceiling(max_freq / 100) * 100))
+
+# Plot CATE distributions with identical axes and breaks
 par(mfrow = c(1, 2))
+
 for (nm in names(forests)) {
-  tau_pp <- 100 * cate_df$tau_hat[cate_df$forest == nm]
-  hist(tau_pp, breaks = common_breaks, col = "#2c7fb8", border = "white",
-       main = nm, xlab = "Predicted effect of foreign name (pp)",
-       xlim = range(common_breaks), ylim = y_lim)
-  abline(v = mean(tau_pp), lty = 2)
+
+  tau_pp <- 100 * cate_df$tau_hat[
+    cate_df$forest == nm
+  ]
+
+  hist(
+    tau_pp,
+    breaks = cate_breaks,
+    col = "#2c7fb8",
+    border = "white",
+    main = nm,
+    xlab = "Predicted effect of foreign name (pp)",
+    xlim = range(cate_breaks),
+    ylim = cate_ylim
+  )
+
+  # Dashed line indicates mean predicted CATE
+  abline(
+    v = mean(tau_pp),
+    lty = 2
+  )
 }
+
 par(mfrow = c(1, 1))
 ```
 
@@ -323,38 +376,172 @@ par(mfrow = c(1, 1))
 Doubly robust ATE within each subgroup. same_exp is only observed in waves 0-1, so its two rows cover those waves only.
 
 ```{r cate-subgroups}
+# Estimate subgroup ATEs using the full-covariate forest (cf2).
+#
+# Missing covariate values are excluded only from the relevant
+# subgroup comparison.
+#
+# A subgroup must contain observations from at least two firms.
+# Subgroups that cannot be estimated are reported as NA,
+# rather than silently removed.
+
 subset_ate <- function(cf, idx, label) {
-  idx <- which(idx)    # drops resumes where the covariate is missing (NA)
-  a <- average_treatment_effect(cf, subset = idx)
-  data.frame(group     = label,
-             n         = length(idx),
-             effect_pp = 100 * a[["estimate"]],
-             se_pp     = 100 * a[["std.err"]])
+
+  # Identify observations belonging to the subgroup
+  idx <- which(!is.na(idx) & idx)
+
+  # Count observations and distinct employer clusters
+  n_obs <- length(idx)
+  n_firms <- length(unique(firm_id[idx]))
+
+  # Report subgroup information
+  cat(
+    "\nSubgroup:", label,
+    "| Observations:", n_obs,
+    "| Firms:", n_firms, "\n"
+  )
+
+  # Do not estimate if there are insufficient clusters
+  if (n_firms < 2) {
+    return(data.frame(
+      group = label,
+      n = n_obs,
+      n_firms = n_firms,
+      effect_pp = NA_real_,
+      se_pp = NA_real_,
+      status = "Insufficient firm clusters"
+    ))
+  }
+
+  # Estimate subgroup ATE
+  a <- tryCatch(
+    average_treatment_effect(cf, subset = idx),
+    error = function(e) {
+      message(
+        "Subgroup estimation failed for ",
+        label, ": ", conditionMessage(e)
+      )
+      NULL
+    }
+  )
+
+  # Preserve the subgroup in the table if estimation fails
+  if (is.null(a)) {
+    return(data.frame(
+      group = label,
+      n = n_obs,
+      n_firms = n_firms,
+      effect_pp = NA_real_,
+      se_pp = NA_real_,
+      status = "Estimation failed"
+    ))
+  }
+
+  data.frame(
+    group = label,
+    n = n_obs,
+    n_firms = n_firms,
+    effect_pp = 100 * unname(a[["estimate"]]),
+    se_pp = 100 * unname(a[["std.err"]]),
+    status = "Estimated"
+  )
 }
 
+# Estimate subgroup effects for each pre-treatment covariate
 subgroups <- c(
   lapply(all_pretreat_cov, function(v) {
-    bind_rows(subset_ate(cf2, df_int1[[v]] == 1, paste(v, "= 1")),
-              subset_ate(cf2, df_int1[[v]] == 0, paste(v, "= 0")))
+    bind_rows(
+      subset_ate(
+        cf2,
+        df_int1[[v]] == 1,
+        paste(v, "= 1")
+      ),
+      subset_ate(
+        cf2,
+        df_int1[[v]] == 0,
+        paste(v, "= 0")
+      )
+    )
   }),
+
+  # Estimate treatment effects by wave
   lapply(waves, function(k) {
-    subset_ate(cf2, df_int1$fall_data == k, paste("wave =", k))
+    subset_ate(
+      cf2,
+      df_int1$fall_data == k,
+      paste("wave =", k)
+    )
   })
 )
 
+# Combine subgroup results
 sub_tab <- bind_rows(subgroups) %>%
-  mutate(lo_pp = effect_pp - 1.96 * se_pp, hi_pp = effect_pp + 1.96 * se_pp)
+  mutate(
+    lo_pp = effect_pp - 1.96 * se_pp,
+    hi_pp = effect_pp + 1.96 * se_pp
+  )
 
-kable(sub_tab, digits = 2, caption = "Forest-based effect by subgroup (cf2, pp)")
+# Display complete results, including unestimable subgroups
+kable(
+  sub_tab,
+  digits = 2,
+  caption = "Forest-based treatment effects by subgroup (cf2, pp)"
+)
+
+# Display subgroups that could not be estimated
+cat("\nSubgroups requiring attention:\n")
+
+print(
+  sub_tab %>%
+    filter(status != "Estimated")
+)
 ```
-
 ### Best linear projection (cf2)
 
 Cluster-robust test of which covariates linearly shift the effect. Uses resumes with every covariate observed, i.e. waves 0-1 (same_exp is missing in wave 2).
 
 ```{r cate-blp}
-blp <- best_linear_projection(cf2, X_cf2, subset = which(complete.cases(X_cf2)))
+# Best Linear Projection (BLP)
+#
+# Use the full-covariate causal forest (cf2), but project its
+# doubly robust treatment-effect scores onto only the three
+# prespecified moderators.
+#
+# same_exp is missing throughout wave 2. Therefore, the BLP
+# uses observations from waves 0 and 1 only.
+#
+# reference, accreditation, and legal remain in the forest
+# but are NOT included in the BLP projection variables.
+
+# Select the three prespecified moderators
+A_blp <- X_cf2[, moderators, drop = FALSE]
+
+# Identify observations where all moderators are observed
+blp_rows <- which(complete.cases(A_blp))
+
+# Verify that the BLP sample is nonempty and has multiple firms
+stopifnot(
+  length(blp_rows) > 0,
+  length(unique(firm_id[blp_rows])) > 1
+)
+
+# Estimate BLP using the full-covariate forest
+blp <- best_linear_projection(
+  cf2,
+  A = A_blp,
+  subset = blp_rows
+)
+
+# Display BLP results
 print(blp)
+
+# Report sample information
+cat("\nBLP sample information:\n")
+cat("Observations:", length(blp_rows), "\n")
+cat("Firms:", length(unique(firm_id[blp_rows])), "\n")
+
+cat("\nObservations by wave:\n")
+print(table(df_int1$fall_data[blp_rows]))
 ```
 
 ### Predicted effect by covariate cell (cf1w)
