@@ -11,7 +11,7 @@ date: "2026-09-30"
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
-This document runs in four stages: **diagnostic tests** on the sample, **causal forests** (fit and overlap check), **causal forest results** (ATE, variable importance, estimated effects) and **validation** of those results (calibration, RATE/TOC, combined verdict, tuning robustness). Covariate balance does not depend on any forest, so it lives in a separate file: `Causal Forest Balance Table.Rmd`. Both files read the analysis sample saved by `cleaned_data.Rmd` (`cleaned data.Rda`), so knit that one first.
+This document runs in four stages: **diagnostic tests** on the sample, **causal forests** (fit and overlap check), **causal forest results** (ATE, estimated effects, moderator table, best linear projection) and **validation** of those results (calibration, RATE/TOC, combined verdict, tuning robustness). Covariate balance does not depend on any forest, so it lives in a separate file: `Causal Forest Balance Table.Rmd`. Both files read the analysis sample saved by `cleaned_data.Rmd` (`cleaned data.Rda`), so knit that one first.
 
 # Setup and data preparation
 
@@ -57,9 +57,10 @@ all_pretreat_cov <- c(
 # accreditation and legal (wave 2 only) dropped.
 # Missing values are NOT recoded there: same_exp is NA for every resume in wave 2 (see the
 # missing-value check below). grf uses missing covariate values directly; the tables that
-# need observed values (balance, subgroups, BLP) use waves 0-1 for same_exp.
+# need observed values (balance, moderator table, BLP) use waves 0-1 for same_exp.
 
-# The wave is saved as a factor; use a numeric code (0, 1, 2) so it can enter X.
+# The wave is saved as a factor with three levels (0, 1, 2). It enters X as two dummies,
+# wave_1 and wave_2 (wave 0 is the reference), so a single split can isolate any wave.
 df_int1 <- df_int1 %>%
   mutate(
     wave_1 = as.integer(fall_data == 1),
@@ -146,13 +147,14 @@ kable(ate_wave, digits = 2,
 All three forests use the same outcome (callback), treatment (D, foreign-sounding name) and clustering (firmid). They differ only in the covariates X:
 
 - **cf1**: three moderators (language skills, extracurricular skills, multinational experience).
-- **cf1w**: the three moderators plus the wave indicator, so it is the like-for-like comparison with the wave-adjusted regressions.
-- **cf2**: all pre-treatment covariates plus the wave indicator.
+- **cf1w**: the three moderators plus the wave (two dummies, wave_1 and wave_2), so it is the like-for-like comparison with the wave-adjusted regressions.
+- **cf2**: all pre-treatment covariates plus the wave dummies.
 
-All three are validated and reported; none is picked after the fact. same_exp is NA for all of wave 2 and is passed to grf as is (grf handles missing covariate values natively).
+The waves differ in design (same_exp is only on the resumes of waves 0-1, and wave 1 uses Pakistani names only), so the forest needs the wave to separate "this moderator matters" from "this wave was different". The wave also enters the forest's propensity (`W.hat`) and outcome (`Y.hat`) models, which absorbs differences in treated share and baseline callback rate across waves. cf1w and cf2 are therefore the main forests, and cf1 (no wave) is kept as a comparison. All three are validated and reported; none is picked after the fact. same_exp is NA for all of wave 2 and is passed to grf as is (grf handles missing covariate values natively).
 
 ```{r forest-specs}
-# TO ASK: MUST WE INCLUDE FALL_DATA?
+# The wave is included in cf1w and cf2: the waves differ in design, so the forest needs it
+# to separate "this moderator matters" from "this wave was different". cf1 has no wave.
 moderators <- c("language_skills", "extracurricular_skills", "same_exp")
 
 covariate_sets <- list(
@@ -224,24 +226,9 @@ for (i in seq_len(nrow(ate_tab))) {
 }
 ```
 
-## Variable importance
-
-Which covariates does each forest use most to split on (i.e., which ones drive the most predictable heterogeneity)?
-
-```{r var-importance}
-vi_tab <- bind_rows(lapply(names(forests), function(nm) {
-  data.frame(forest     = nm,
-             variable   = colnames(forests[[nm]]$X),
-             importance = as.numeric(variable_importance(forests[[nm]]$cf)))
-})) %>%
-  arrange(factor(forest, levels = names(forests)), desc(importance))
-
-kable(vi_tab, digits = 3, caption = "Causal forest variable importance")
-```
-
 ## Estimated effects (CATE)
 
-The forest's own output: a predicted treatment effect for every resume. Read these as descriptive/exploratory unless the validation section supports heterogeneity.
+The forest's own output: a predicted treatment effect for every resume. Read these as descriptive/exploratory unless the validation section supports heterogeneity. Compare `sd_pp` with `mean_se_pp` in the table below: when the spread of the predictions is no larger than the noise in each prediction, the spread is about what estimation noise alone would produce, so the histograms are not evidence of heterogeneity by themselves.
 
 ### Distribution of predicted effects
 
@@ -279,57 +266,80 @@ for (nm in names(forests)) {
 par(mfrow = c(1, 1))
 ```
 
-### Effect by subgroup (cf2)
+### Moderator table: regression and forest on the same resumes
 
-Doubly robust ATE within each subgroup. same_exp is only observed in waves 0-1, so its two rows cover those waves only.
+The three pre-specified moderators are language skills, extracurricular skills and multinational experience (same_exp). For each moderator m the regression is `callback ~ D * m + wave fixed effects`, with firm-clustered (CR2) standard errors, fitted only on the resumes where m is observed. It gives the name effect when m = 0, the name effect when m = 1, and the interaction beta3 (the change in the name effect when m goes from 0 to 1), which is the formal test of whether the penalty differs. The forest columns are doubly robust ATEs from cf2 computed with `subset = !is.na(m) & m == value`, so they come from exactly the same resumes as the regression and the two sets of numbers can be compared side by side. same_exp is only observed in waves 0-1, so its rows use those waves only. This table is the main moderator result whatever the validation section finds.
 
-```{r cate-subgroups}
-subset_ate <- function(cf, idx, label) {
-  idx <- which(idx)    # drops resumes where the covariate is missing (NA)
-  a <- average_treatment_effect(cf, subset = idx)
-  data.frame(group     = label,
-             n         = length(idx),
-             effect_pp = 100 * a[["estimate"]],
-             se_pp     = 100 * a[["std.err"]])
+```{r moderator-table}
+moderator_rows <- function(v) {
+  obs   <- !is.na(df_int1[[v]])            # resumes where the moderator is observed
+  dat   <- df_int1[obs, ]
+  dat$y  <- as.numeric(dat$callback)
+  dat$m  <- dat[[v]]
+  dat$m0 <- 1 - dat$m
+
+  # beta3: name x moderator interaction
+  fit_int <- lm_robust(y ~ D * m + factor(fall_data), data = dat,
+                       clusters = firmid, se_type = "CR2")
+  # The same model written so the two name effects come out directly:
+  # D:m0 = name effect when m = 0, D:m = name effect when m = 1
+  fit_grp <- lm_robust(y ~ D:m0 + D:m + m + factor(fall_data), data = dat,
+                       clusters = firmid, se_type = "CR2")
+
+  forest_effect <- function(value) {
+    idx <- which(obs & df_int1[[v]] == value)
+    a   <- average_treatment_effect(cf2, subset = idx)
+    c(n = length(idx), est = 100 * a[["estimate"]], se = 100 * a[["std.err"]])
+  }
+  f0 <- forest_effect(0)
+  f1 <- forest_effect(1)
+
+  list(
+    groups = data.frame(
+      moderator    = v,
+      value        = c(0, 1),
+      n            = c(f0[["n"]], f1[["n"]]),
+      regression   = 100 * unname(coef(fit_grp)[c("D:m0", "D:m")]),
+      regression_se = 100 * unname(fit_grp$std.error[c("D:m0", "D:m")]),
+      forest       = c(f0[["est"]], f1[["est"]]),
+      forest_se    = c(f0[["se"]], f1[["se"]])
+    ),
+    interaction = data.frame(
+      moderator = v,
+      n         = nrow(dat),
+      firms     = length(unique(dat$firmid)),
+      beta3_pp  = 100 * unname(coef(fit_int)["D:m"]),
+      se_pp     = 100 * unname(fit_int$std.error["D:m"]),
+      p         = unname(fit_int$p.value["D:m"])
+    )
+  )
 }
 
-subgroups <- c(
-  lapply(all_pretreat_cov, function(v) {
-    bind_rows(subset_ate(cf2, df_int1[[v]] == 1, paste(v, "= 1")),
-              subset_ate(cf2, df_int1[[v]] == 0, paste(v, "= 0")))
-  }),
-  lapply(waves, function(k) {
-    subset_ate(cf2, df_int1$fall_data == k, paste("wave =", k))
-  })
-)
+moderator_res <- lapply(moderators, moderator_rows)
 
-sub_tab <- bind_rows(subgroups) %>%
-  mutate(lo_pp = effect_pp - 1.96 * se_pp, hi_pp = effect_pp + 1.96 * se_pp)
+kable(bind_rows(lapply(moderator_res, `[[`, "groups")), digits = 2,
+      col.names = c("moderator", "m", "resumes", "regression (pp)", "SE",
+                    "forest cf2 (pp)", "SE"),
+      caption = "Name effect by moderator value, same resumes in both columns (pp)")
 
-kable(sub_tab, digits = 2, caption = "Forest-based effect by subgroup (cf2, pp)")
+kable(bind_rows(lapply(moderator_res, `[[`, "interaction")), digits = 3,
+      col.names = c("moderator", "resumes", "firms", "beta3 (pp)", "SE (pp)", "p"),
+      caption = paste("Interaction test: change in the name effect when the",
+                      "moderator goes from 0 to 1 (wave FE, firm-clustered CR2)"))
 ```
 
-### Best linear projection (cf2)
+### Best linear projection (cf2, three moderators)
 
-Cluster-robust test of which covariates linearly shift the effect. Uses resumes with every covariate observed, i.e. waves 0-1 (same_exp is missing in wave 2).
+The BLP regresses cf2's doubly robust scores on the three moderators (`A`). The other covariates still enter through cf2's nuisance estimates; `A` only sets what the effect is summarised on. The coefficients are a joint linear approximation: they do not hold the other covariates fixed, and they need not match the one-at-a-time interaction terms above when the moderators are correlated. Resumes where any moderator is missing are excluded with `subset`, so this uses waves 0-1 (same_exp is missing in wave 2). The intercept is the effect when all three moderators are 0.
 
 ```{r cate-blp}
-blp <- best_linear_projection(cf2, X_cf2, subset = which(complete.cases(X_cf2)))
+A_mod  <- X_cf2[, moderators, drop = FALSE]
+blp_ok <- which(complete.cases(A_mod))
+cat("Resumes used:", length(blp_ok),
+    "| firms:", length(unique(firm_id[blp_ok])), "\n\n")
+
+blp <- best_linear_projection(cf2, A_mod, subset = blp_ok)
 print(blp)
-```
-
-### Predicted effect by covariate cell (cf1)
-
-cf1 has only a few distinct covariate combinations, so show them directly (same_exp = NA is wave 2).
-
-```{r cate-cf1-cells}
-cf1_cells <- df_int1 %>%
-  mutate(tau_hat = predict(cf1)$predictions) %>%
-  group_by(language_skills, extracurricular_skills, same_exp) %>%
-  summarise(n = n(), effect_pp = 100 * mean(tau_hat), .groups = "drop") %>%
-  arrange(effect_pp)
-
-kable(cf1_cells, digits = 2, caption = "cf1: predicted effect by covariate cell (pp)")
 ```
 
 # Validation of causal forest results
@@ -430,7 +440,7 @@ for (nm in names(rate_res)) {
 
 ## Combined reading (rule fixed in advance)
 
-Both checks support heterogeneity: calibration differential coefficient positive and significant (one-sided p < 0.05) and the headline AUTOC interval excluding 0. Neither supports it: report that we find no statistically reliable evidence of heterogeneity, and do not interpret forest subgroup patterns. They disagree: call the evidence inconclusive and treat any subgroup patterns as exploratory only. A null here may reflect low power, not constant effects.
+Both checks support heterogeneity: calibration differential coefficient positive and significant (one-sided p < 0.05) and the headline AUTOC interval excluding 0. Neither supports it: report that we find no statistically reliable evidence of heterogeneity, and do not interpret forest subgroup patterns. They disagree: call the evidence inconclusive and treat any subgroup patterns as exploratory only. A null here may reflect low power, not constant effects. If the verdict is a null, covariate means across held-out priority groups are not reported: that descriptive step is only meaningful when the RATE is clearly non-zero.
 
 ```{r val-verdict}
 verdict_tab <- cal_tab %>%

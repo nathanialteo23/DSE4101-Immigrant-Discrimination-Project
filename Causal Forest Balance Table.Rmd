@@ -63,7 +63,7 @@ waves <- sort(unique(df_int1$fall_data))
 
 # Covariate balance table
 
-Standardised Mean Difference (SMD) for covariate X = (mean in D=1 minus mean in D=0) / sqrt((var in D=1 + var in D=0) / 2). Rule of thumb: |SMD| < 0.1 counts as acceptable covariate balance and |SMD| > 1 is flagged for checks. The p-value is from a firm-clustered regression of each covariate on D. Wave is a three-level code, so it enters as one dummy per wave rather than as a numeric code. same_exp is only observed in waves 0-1 (the `missing` column counts the resumes without it), so its row is calculated on those waves only. N counts the number of resumes with X = 1 within each treatment group.
+Standardised Mean Difference (SMD) for covariate X = (mean in D=1 minus mean in D=0) / sqrt((var in D=1 + var in D=0) / 2). Rule of thumb: |SMD| < 0.1 counts as acceptable covariate balance and |SMD| >= 0.1 is flagged for checks. The p-value is from a firm-clustered regression of each covariate on D. Wave is a three-level code, so it enters as one dummy per wave rather than as a numeric code. same_exp is only observed in waves 0-1 (the `missing` column counts the resumes without it), so its row is calculated on those waves only. N counts the number of resumes with X = 1 within each treatment group.
 
 
 ```{r balance-table}
@@ -155,4 +155,39 @@ within_tab <- bind_rows(lapply(all_pretreat_cov, within_row))
 kable(within_tab, digits = 3,
       caption = paste("Balance within wave (name-type difference,",
                       "wave fixed effects, firm-clustered)"))
+```
+
+# Joint balance test
+
+A single test of whether the resume characteristics jointly predict the name type. D is regressed on all covariates plus wave fixed effects with firm-clustered (CR2) standard errors, and the test is that every covariate coefficient is zero (a Wald test, reported as F = chi-square / k, with the number of firms minus one as the denominator degrees of freedom). A large p-value means there is no evidence that the characteristics were assigned in relation to the name type. same_exp is only observed in waves 0-1, so the test is run twice: on all waves without same_exp, and on waves 0-1 with it.
+
+```{r joint-balance}
+joint_balance <- function(vars, label) {
+  dat <- df_int1[complete.cases(df_int1[, vars]), ]
+  fit <- lm_robust(as.formula(paste("D ~", paste(vars, collapse = " + "),
+                                    "+ factor(fall_data)")),
+                   data = dat, clusters = firmid, se_type = "CR2")
+  b     <- coef(fit)[vars]
+  V     <- vcov(fit)[vars, vars]
+  wald  <- as.numeric(t(b) %*% solve(V) %*% b)
+  k     <- length(vars)
+  firms <- length(unique(dat$firmid))
+  data.frame(sample  = label,
+             resumes = nrow(dat),
+             firms   = firms,
+             k       = k,
+             F_stat  = wald / k,
+             p       = pf(wald / k, k, firms - 1, lower.tail = FALSE))
+}
+
+joint_tab <- bind_rows(
+  joint_balance(setdiff(all_pretreat_cov, "same_exp"),
+                "All waves, without same_exp"),
+  joint_balance(all_pretreat_cov,
+                "Waves 0-1, with same_exp")
+)
+
+kable(joint_tab, digits = 3,
+      col.names = c("sample", "resumes", "firms", "covariates", "F", "p"),
+      caption = "Joint balance test (D on all covariates + wave FE, firm-clustered)")
 ```
