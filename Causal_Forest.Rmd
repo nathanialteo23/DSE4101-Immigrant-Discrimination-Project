@@ -144,6 +144,107 @@ kable(ate_wave, digits = 2,
       caption = "Name penalty by wave (percentage points, firm-clustered CR2)")
 ```
 
+
+## Overlap/Propensity check (shifted up)
+```{r forest-specs-for-prop-check}
+# Three pre-specified moderators
+moderators <- c(
+  "language_skills",
+  "extracurricular_skills",
+  "same_exp"
+)
+
+# Covariate specifications for both forests
+covariate_sets <- list(
+  "cf1w (3 moderators + wave)" = c(
+    moderators,
+    "wave_1",
+    "wave_2"
+  ),
+
+  "cf2 (full covariates)" = c(
+    all_pretreat_cov,
+    "wave_1",
+    "wave_2"
+  )
+)
+
+# Short labels for validation tables
+short_name <- function(x) sub(" .*", "", x)
+```
+
+
+
+
+```{r}
+## Overlap / propensity check (cf2 full covariates)
+
+# Same covariates used in cf2
+X_propensity <- df_int1 %>%
+  select(all_of(all_pretreat_cov),
+         wave_1, wave_2) %>%
+  as.matrix()
+
+# Estimate propensity scores before fitting causal forests
+set.seed(4101)
+
+propensity_cf2 <- regression_forest(
+  X_propensity,
+  W_all,
+  clusters = firm_id
+)
+
+# Out-of-bag estimated propensity scores
+W_hat_cf2 <- predict(propensity_cf2)$predictions
+
+# Observed treatment proportion
+p_actual <- mean(W_all)
+
+# Display only the cf2 histogram
+hist(
+  W_hat_cf2,
+  breaks = 30,
+  col = "#2c7fb8",
+  border = "white",
+  main = "cf2 (full covariates)",
+  xlab = "Estimated P(foreign name | X)",
+  xlim = c(0, 1)
+)
+
+abline(
+  v = p_actual,
+  col = "red",
+  lty = 2,
+  lwd = 2
+)
+
+legend(
+  "topright",
+  legend = "Observed treatment proportion",
+  col = "red",
+  lty = 2,
+  lwd = 2,
+  bty = "n",
+  cex = 0.75
+)
+
+# Numerical overlap diagnostics
+cat("Observed treatment proportion:",
+    round(p_actual, 3), "\n")
+
+cat("Estimated propensity range:",
+    round(min(W_hat_cf2), 3), "to",
+    round(max(W_hat_cf2), 3), "\n")
+
+cat("Proportion below 0.1:",
+    round(mean(W_hat_cf2 < 0.1), 3), "\n")
+
+cat("Proportion above 0.9:",
+    round(mean(W_hat_cf2 > 0.9), 3), "\n")
+```
+
+
+
 # Causal forests
 
 ## Specifications
@@ -189,7 +290,7 @@ cf2   <- forests[["cf2 (full covariates)"]]$cf
 X_cf2 <- forests[["cf2 (full covariates)"]]$X
 ```
 
-## Overlap / propensity check
+## [Overlap / propensity check
 
 Because name ethnicity is experimentally randomized within a job posting, the estimated propensity scores (`W.hat`) should cluster fairly tightly around the actual treatment share rather than displaying the extreme values that signal confounding.
 
