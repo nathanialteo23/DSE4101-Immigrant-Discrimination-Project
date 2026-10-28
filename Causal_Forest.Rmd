@@ -22,6 +22,7 @@ if (length(missing_packages) > 0) {
   install.packages(missing_packages, repos = "https://cloud.r-project.org")
 }
 library(estimatr)
+library(ggplot2)
 library(dplyr)
 library(tidyr)
 library(grf)
@@ -434,6 +435,56 @@ for (nm in names(forests)) {
 
 par(mfrow = c(1, 1))
 ```
+
+### Box plot of CATEs
+```{r}
+
+
+# Out-of-bag CATE predictions from cf2 (percentage points)
+tau_cf2 <- 100 * predict(cf2)$predictions
+
+# Full cf2 covariate set
+cf2_vars <- c(all_pretreat_cov, "wave_1", "wave_2")
+
+# Construct long-format dataset
+df_long <- df_int1 %>%
+  select(all_of(cf2_vars)) %>%
+  mutate(tau_hat = tau_cf2) %>%
+  pivot_longer(
+    cols = all_of(cf2_vars),
+    names_to = "covariate",
+    values_to = "value",
+    values_transform = list(value = as.character)
+  ) %>%
+  mutate(
+    value = ifelse(is.na(value), "Missing", value),
+    covariate = factor(covariate, levels = cf2_vars)
+  )
+
+# Box plots by covariate value
+ggplot(df_long, aes(x = value, y = tau_hat)) +
+  geom_boxplot(
+    fill = "#2c7fb8",
+    alpha = 0.7,
+    outlier.alpha = 0.3
+  ) +
+  facet_wrap(~ covariate, scales = "free_x", ncol = 3) +
+  labs(
+    x = "Covariate value",
+    y = "Predicted CATE (percentage points)",
+    title = "Distribution of Predicted CATEs by Covariate",
+    subtitle = "cf2: Full covariate specification"
+  ) +
+  theme_minimal(base_size = 11) +
+  theme(
+    strip.text = element_text(face = "bold"),
+    plot.title = element_text(face = "bold"),
+    axis.text.x = element_text(size = 8)
+  )
+```
+
+
+
 
 ### Moderator table: regression and forest on the same resumes
 
