@@ -127,7 +127,7 @@ kable(bal_tab_display, digits = 3,
       col.names = c("variable", "N D=0", "N D=1",
                     "mean D=0", "mean D=1",
                     "SMD", "p (clustered)", "missing", "flag"),
-      caption = paste("Table 1: Balance of resume characteristics by name type",
+      caption = paste("Balance of resume characteristics by name type",
                       "(D = 1 foreign name)"))
 ```
 From table 1, most resume characteristics are comparable between treatment and control groups, with absolute SMDs below 0.1. However, ba_quality has a statistically significant difference (p < 0.001), although its SMD of 0.095 falls just below the 0.1 threshold.
@@ -162,7 +162,7 @@ wave_tab <- df_int1 %>%
             callback_rate_D1 = mean(as.numeric(callback)[D == 1]),
             .groups = "drop")
 
-kable(wave_tab, digits = 3, caption = "Table 2: Treatment share and callback rate by wave")
+kable(wave_tab, digits = 3, caption = "Treatment share and callback rate by wave")
 ```
 
 ## Balance within wave
@@ -175,7 +175,7 @@ $$
 SMD_{adj} = \frac{\hat{\beta}_D}{\sqrt{\frac{s^2_{D=1} + s^2_{D=0}}{2}}}
 $$
 
-The denominator is deliberately not recomputed after adjustment. Keeping it fixed means the raw and adjusted SMDs are on the same scale, so any change between them reflects a change in the mean difference and not a change in the scaling. The same 0.1 threshold applies.
+The denominator is deliberately not recomputed after adjustment. Keeping it fixed means the raw and adjusted SMDs are on the same scale, so any change between them reflects a change in the mean difference and not a change in the scaling. We retain |SMD| = 0.1 as a diagnostic threshold for assessing covariate balance.
 
 Table 3 shows that none of the covariates exhibit statistically significant differences between treatment and control groups after controlling for wave, and that every adjusted SMD is below 0.1 in absolute value. Notably, the difference in ba_quality, which was statistically significant in Table 1, is no longer significant (p = 0.227), and its SMD falls from 0.095 to a much smaller value. Figure 1 shows the raw and adjusted SMDs together.
 
@@ -267,14 +267,14 @@ knitr::kable(
     "p (clustered)"
   ),
   caption = paste(
-    "Table 3: Balance within wave -",
+    "Balance within wave -",
     "wave-adjusted means, differences and SMDs",
     "(firm-clustered)"
   )
 )
 ```
 
-```{r love-plot, fig.height=3.8, fig.width=6.5, fig.cap="Figure 1: Absolute SMD before and after adjusting for wave (dashed line = 0.1 threshold)"}
+```{r love-plot, fig.height=3.8, fig.width=6.5, fig.cap="Absolute SMD before and after adjusting for wave (dashed line = 0.1 threshold)"}
 # Love plot: raw vs wave-adjusted |SMD| for each resume characteristic
 lp <- within_tab_adj[order(abs(within_tab_adj$SMD_raw)), ]
 y  <- seq_len(nrow(lp))
