@@ -12,7 +12,8 @@ date: "`r Sys.Date()`"
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
-Balance checks for the causal forest sample. They do not depend on any forest, so they live here rather than in `Causal_Forest.Rmd`. Both files read the analysis sample saved by `cleaned_data.Rmd` (`cleaned data.Rda`), so knit that one first.
+We assess covariate balance between treatment and control groups in our restricted Type 0/1 sample to validate it before subsequent treatment-effect estimation using interaction regressions and causal forests. These checks are conducted independently of either estimation method and are therefore documented separately. Both analyses use the sample prepared by cleaned_data.Rmd and saved as cleaned data.Rda, so the cleaning script must be knitted first.
+
 
 # Setup and data preparation
 
@@ -63,8 +64,17 @@ waves <- sort(unique(df_int1$fall_data))
 
 # Covariate balance table
 
-Standardised Mean Difference (SMD) for covariate X = (mean in D=1 minus mean in D=0) / sqrt((var in D=1 + var in D=0) / 2). Rule of thumb: |SMD| < 0.1 counts as acceptable covariate balance and |SMD| >= 0.1 is flagged for checks. The p-value is from a firm-clustered regression of each covariate on D. Wave is a three-level code, so it enters as one dummy per wave rather than as a numeric code. same_exp is only observed in waves 0-1 (the `missing` column counts the resumes without it), so its row is calculated on those waves only. N counts the number of resumes with X = 1 within each treatment group.
+To assess whether our sample restrictions (to Types 0 and 1) preserve comparability between treatment (D = 1, foreign-sounding name) and control (D = 0, English-sounding name) groups, we first examine the distribution of pre-treatment resume characteristics across both groups.
 
+We calculate the Standardised Mean Difference (SMD) for each covariate:
+
+$$
+SMD = \frac{\bar{X}_{D=1} - \bar{X}_{D=0}}{\sqrt{\frac{s^2_{D=1} + s^2_{D=0}}{2}}}
+$$
+
+Covariates with $|SMD| \geq 0.1$ are flagged for further investigation. We also report p-values from individual regressions of each covariate on treatment assignment, with standard errors clustered at the firm level. Wave is a three-level variable (0, 1, 2), so each wave is represented by a separate binary indicator rather than treated as a continuous variable.
+
+The N columns report the number of resumes with $X = 1$ in each treatment group, while the missing column records the number of missing observations. As `same_exp` is only observed in Waves 0-1, its SMD and p-value are calculated using those waves only.
 
 ```{r balance-table}
 smd <- function(x, d) {
@@ -103,19 +113,40 @@ balance_row <- function(v, dat) {
 bal_tab <- bind_rows(lapply(bal_vars, balance_row, dat = df_bal)) %>%
   mutate(flag = ifelse(abs(SMD) >= 0.1, "check", ""))
 
-kable(bal_tab, digits = 3,
-      col.names = c("variable", "N D=0", "N D=1", "mean D=0", "mean D=1",
+
+bal_tab_display <- bal_tab %>%
+  mutate(p_clustered = ifelse(
+    is.na(p_clustered),
+    NA_character_,
+    ifelse(p_clustered < 0.001,
+           "<0.001",
+           sprintf("%.3f", p_clustered))
+  ))
+
+kable(bal_tab_display, digits = 3,
+      col.names = c("variable", "N D=0", "N D=1",
+                    "mean D=0", "mean D=1",
                     "SMD", "p (clustered)", "missing", "flag"),
-      caption = paste("Balance of resume characteristics by name type",
+      caption = paste("Table 1: Balance of resume characteristics by name type",
                       "(D = 1 foreign name)"))
 ```
+From table 1, most resume characteristics are comparable between treatment and control groups, with absolute SMDs below 0.1. However, ba_quality has a statistically significant difference (p < 0.001), although its SMD of 0.095 falls just below the 0.1 threshold.
 
+Notably, more substantial imbalances are observed in wave composition, particularly Waves 1 and 2 (both p < 0.001). These differences suggest that treatment and control resumes are not distributed equally across experimental waves.
+
+We therefore examine wave composition and reassess covariate balance after controlling for wave in the following section.
 
 # Wave checks
 
-The balance table shows treated share differs a lot by wave. These two checks ask whether that is a composition issue (which name types were sampled in which wave) or a randomisation problem within wave. (Whether the name penalty itself differs by wave is checked in `Causal_Forest.Rmd`.)
+Table 1 shows substantial differences in treatment shares across waves. We conduct two additional checks to investigate whether these differences reflect changes in sample composition across waves or potential covariate imbalance within waves.
 
 ## Wave composition
+
+We first examine which name ethnicities are represented in each wave and the corresponding treatment shares.
+
+Table 2 shows that treatment shares vary considerably across waves, ranging from 31.2% in Wave 1 to 53.8% in Wave 2. The ethnicity breakdown above the Table 2 shows that Wave 0 includes Chinese and Indian names, Wave 1 includes Pakistani names, and Wave 2 includes Chinese and Indian names again, alongside Canadian names in all three waves.
+
+This suggests that the differences in treatment shares are associated with changes in the ethnic composition of the experimental sample across waves, rather than necessarily indicating a failure of randomization.
 
 ```{r wave-composition}
 # Which name types appear in which wave?
@@ -131,36 +162,152 @@ wave_tab <- df_int1 %>%
             callback_rate_D1 = mean(as.numeric(callback)[D == 1]),
             .groups = "drop")
 
-kable(wave_tab, digits = 3, caption = "Treatment share and callback rate by wave")
+kable(wave_tab, digits = 3, caption = "Table 2: Treatment share and callback rate by wave")
 ```
 
 ## Balance within wave
 
-```{r balance-within-wave}
-# Difference between name types after absorbing wave fixed effects.
-# Resumes where the variable is missing are dropped (same_exp: waves 0-1 only).
-within_row <- function(v) {
-  dat   <- df_int1
+We then examine if pre-treatment resume characteristics remain balanced between treatment and control groups after accounting for wave composition. We regress each covariate on treatment assignment and wave fixed effects, with standard errors clustered at the firm level.
+
+For each covariate we also report a wave-adjusted standardised mean difference. Its numerator is the regression coefficient on $D$ (the difference in means holding wave fixed). Its denominator is the *raw* pooled standard deviation, the same one used in Table 1:
+
+$$
+SMD_{adj} = \frac{\hat{\beta}_D}{\sqrt{\frac{s^2_{D=1} + s^2_{D=0}}{2}}}
+$$
+
+The denominator is deliberately not recomputed after adjustment. Keeping it fixed means the raw and adjusted SMDs are on the same scale, so any change between them reflects a change in the mean difference and not a change in the scaling. The same 0.1 threshold applies.
+
+Table 3 shows that none of the covariates exhibit statistically significant differences between treatment and control groups after controlling for wave, and that every adjusted SMD is below 0.1 in absolute value. Notably, the difference in ba_quality, which was statistically significant in Table 1, is no longer significant (p = 0.227), and its SMD falls from 0.095 to a much smaller value. Figure 1 shows the raw and adjusted SMDs together.
+
+Overall, the results suggest that the differences observed in Table 1 are largely associated with differences in wave composition. We find no statistically significant evidence of covariate imbalance within waves, consistent with the original experimental randomization.
+
+Note: For each covariate, we estimate the regression $$X_i = \alpha + \beta D_i + \delta_{w(i)} + \varepsilon_i$$. Adjusted means are obtained from predicted covariate values for D = 0 and D = 1, controlling for waves, while adjusted differences correspond to the estimated coefficient on D. The adjusted SMD divides this coefficient by the raw pooled standard deviation; the raw SMD is the unadjusted standardised difference from Table 1, computed on the same observations. The regression coefficient weights the within-wave differences by precision, not by wave sample share. Standard errors are clustered at the firm level. The `same_exp` regression is restricted to Waves 0-1 due to structural missingness in Wave 2. Values are rounded to three decimal places.
+
+```{r within-wave-balance}
+# Using regression, get wave-adjusted means, differences and SMDs
+
+within_row_adj <- function(v) {
+  dat <- df_int1
   dat$x <- as.numeric(dat[[v]])
-  fit   <- lm_robust(x ~ D + factor(fall_data), data = dat,
-                     clusters = firmid, se_type = "CR2")
-  data.frame(variable         = v,
-             diff_D1_minus_D0 = unname(coef(fit)["D"]),
-             se               = unname(fit$std.error["D"]),
-             p_clustered      = unname(fit$p.value["D"]))
+
+  # Keep only observations used in the regression
+  dat <- dat[!is.na(dat$x) &
+             !is.na(dat$D) &
+             !is.na(dat$fall_data) &
+             !is.na(dat$firmid), ]
+
+  # Same regression as original Table 3
+  fit <- lm_robust(
+    x ~ D + factor(fall_data),
+    data = dat,
+    clusters = firmid,
+    se_type = "CR2"
+  )
+
+  # Predict for D=0 and D=1 controlling for wave
+  dat0 <- dat
+  dat0$D <- 0
+
+  dat1 <- dat
+  dat1$D <- 1
+
+  mean_D0_adj <- mean(predict(fit, newdata = dat0))
+  mean_D1_adj <- mean(predict(fit, newdata = dat1))
+
+  # Raw pooled SD (unadjusted), the same denominator as the Table 1 SMD
+  x1 <- dat$x[dat$D == 1]
+  x0 <- dat$x[dat$D == 0]
+  sd_pooled <- sqrt((var(x1) + var(x0)) / 2)
+
+  b <- unname(coef(fit)["D"])
+
+  data.frame(
+    variable = v,
+    mean_D0_adj = mean_D0_adj,
+    mean_D1_adj = mean_D1_adj,
+    diff_D1_minus_D0 = b,
+    se = unname(fit$std.error["D"]),
+    SMD_raw = (mean(x1) - mean(x0)) / sd_pooled,
+    SMD_adj = b / sd_pooled,
+    p_clustered = unname(fit$p.value["D"])
+  )
 }
 
-within_tab <- bind_rows(lapply(all_pretreat_cov, within_row))
+# Generate within-wave table
+within_tab_adj <- bind_rows(
+  lapply(all_pretreat_cov, within_row_adj)
+)
 
-kable(within_tab, digits = 3,
-      caption = paste("Balance within wave (name-type difference,",
-                      "wave fixed effects, firm-clustered)"))
+# Format p-values for display
+within_tab_adj_display <- within_tab_adj %>%
+  mutate(
+    p_clustered = ifelse(
+      is.na(p_clustered),
+      NA_character_,
+      ifelse(
+        p_clustered < 0.001,
+        "<0.001",
+        sprintf("%.3f", p_clustered)
+      )
+    )
+  )
+
+# Display Table 3
+knitr::kable(
+  within_tab_adj_display,
+  digits = 3,
+  col.names = c(
+    "Covariate",
+    "Adjusted Mean D=0",
+    "Adjusted Mean D=1",
+    "Adjusted Difference",
+    "SE",
+    "SMD (raw)",
+    "SMD (adjusted)",
+    "p (clustered)"
+  ),
+  caption = paste(
+    "Table 3: Balance within wave -",
+    "wave-adjusted means, differences and SMDs",
+    "(firm-clustered)"
+  )
+)
 ```
+
+```{r love-plot, fig.height=3.8, fig.width=6.5, fig.cap="Figure 1: Absolute SMD before and after adjusting for wave (dashed line = 0.1 threshold)"}
+# Love plot: raw vs wave-adjusted |SMD| for each resume characteristic
+lp <- within_tab_adj[order(abs(within_tab_adj$SMD_raw)), ]
+y  <- seq_len(nrow(lp))
+xmax <- max(0.12, abs(lp$SMD_raw), abs(lp$SMD_adj)) * 1.1
+
+op <- par(mar = c(4, 11, 1, 1))
+plot(abs(lp$SMD_raw), y, xlim = c(0, xmax), ylim = c(0.5, length(y) + 0.5),
+     pch = 16, col = "grey50", yaxt = "n", ylab = "",
+     xlab = "Absolute standardised mean difference")
+points(abs(lp$SMD_adj), y, pch = 17, col = "#2c7fb8")
+segments(abs(lp$SMD_raw), y, abs(lp$SMD_adj), y, col = "grey80")
+axis(2, at = y, labels = lp$variable, las = 1)
+abline(v = 0.1, lty = 2)
+legend("bottomright", legend = c("Raw", "Wave-adjusted"),
+       pch = c(16, 17), col = c("grey50", "#2c7fb8"), bty = "n", cex = 0.8)
+par(op)
+```
+
 
 # Joint balance test
 
-A single test of whether the resume characteristics jointly predict the name type. D is regressed on all covariates plus wave fixed effects with firm-clustered (CR2) standard errors, and the test is that every covariate coefficient is zero (a Wald test, reported as F = chi-square / k, with the number of firms minus one as the denominator degrees of freedom). A large p-value means there is no evidence that the characteristics were assigned in relation to the name type. same_exp is only observed in waves 0-1, so the test is run twice: on all waves without same_exp, and on waves 0-1 with it.
+Another test we did to assess whether the restricted sample preserves covariate balance between treatment and control groups: We conducted a joint balance test by regressing treatment assignment on all pre-treatment resume characteristics and wave fixed effects:
 
+$$
+D_i = \alpha + \sum_{j=1}^{k} \gamma_j X_{ij}
++ \delta_{w(i)} + \varepsilon_i
+$$
+
+where $D_i$ indicates treatment assignment (1 = foreign-sounding name, 0 = English-sounding name), $X_{ij}$ represents the $k$ pre-treatment resume characteristics, and $\delta_{w(i)}$ denotes wave fixed effects.
+
+We test the joint null hypothesis $H_0: \gamma_1 = \gamma_2 = \cdots = \gamma_k = 0$ using a Wald test with firm-clustered (CR2) standard errors. The Wald statistic is reported as an F-statistic ($F = \chi^2/k$), using the number of firms minus one as the denominator degrees of freedom. Wave fixed effects are included as controls but excluded from the joint restrictions.
+
+A large p-value indicates insufficient evidence that the résumé characteristics jointly predict treatment assignment, conditional on wave. Since same_exp is only observed in Waves 0–1, we conduct two tests: one using all waves without same_exp, and another restricted to Waves 0–1 including same_exp.
 ```{r joint-balance}
 joint_balance <- function(vars, label) {
   dat <- df_int1[complete.cases(df_int1[, vars]), ]
@@ -191,3 +338,7 @@ kable(joint_tab, digits = 3,
       col.names = c("sample", "resumes", "firms", "covariates", "F", "p"),
       caption = "Joint balance test (D on all covariates + wave FE, firm-clustered)")
 ```
+
+The joint tests fail to reject the null hypothesis that the included resume characteristics have no joint relationship with treatment assignment ($H_0: \gamma_1 = \cdots = \gamma_k = 0$). For the full sample excluding same_exp, the test yields F = 0.456 (p = 0.841). Similarly, restricting the sample to Waves 0–1 and including same_exp yields F = 0.353 (p = 0.929).
+
+Overall, the results are consistent with the original experimental randomization and provide no evidence that our sample restrictions introduced systematic imbalance in the observed resume characteristics between treatment and control groups, conditional on wave.
