@@ -420,24 +420,22 @@ immigrant-name callback penalty?</td>
 </tr>
 </tbody>
 </table>
-<p>The interaction hypotheses are motivated by statistical
-discrimination theory: additional resume signals may reduce employer
-uncertainty about applicant productivity.</p>
 <p>The regressions are estimated separately for each moderator, using
 the waves in which that characteristic was randomized. Language skills
 and extracurricular activities use Waves 0, 1 and 2, while multinational
 firm experience uses Waves 0 and 1 due to structural missingness in Wave
 2.</p>
-<p>All regressions include wave fixed effects and firm-clustered CR2
-standard errors. Control variables are selected according to the
-principle of retaining only variables observed across all waves included
-in each regression.</p>
+<p>All three regressions use a common control set comprising female,
+ba_quality, ma, and exp_highquality, alongside wave fixed effects. These
+controls are observed across all three waves, ensuring consistency in
+model specification across moderators. Standard errors are clustered by
+firmid using CR2.</p>
 </div>
 <div id="setup-and-data-preparation" class="section level1">
 <h1>2. Setup and data preparation</h1>
 <p>The analysis uses the cleaned Type 0/1 sample (<code>df_int1</code>)
-also used in the balance-table and causal-forest scripts. Treatment
-<code>D = 1</code> denotes an immigrant-sounding name (Type 1), and
+also used in the balance table and causal-forest scripts. Treatment
+<code>D = 1</code> indicates an immigrant-sounding name (Type 1), and
 <code>D = 0</code> an English-sounding name (Type 0). Outcome
 <code>callback</code> is binary.</p>
 <pre class="r"><code>required &lt;- c(&quot;dplyr&quot;, &quot;estimatr&quot;, &quot;knitr&quot;, &quot;broom&quot;)
@@ -445,7 +443,8 @@ missing &lt;- setdiff(required, rownames(installed.packages()))
 if (length(missing)) install.packages(missing, repos = &quot;https://cloud.r-project.org&quot;)
 library(dplyr)
 library(estimatr)
-library(knitr)</code></pre>
+library(knitr)
+library(clubSandwich)</code></pre>
 <pre class="r"><code>if (!file.exists(&quot;cleaned data.Rda&quot;)) {
   stop(&quot;Run cleaned_data.Rmd first, or put cleaned data.Rda in this working directory.&quot;)
 }
@@ -472,9 +471,11 @@ print(table(dat$D, useNA = &quot;ifany&quot;))</code></pre>
 <pre class="r"><code>#Firm count 
 cat(&quot;Firms:&quot;, dplyr::n_distinct(dat$firmid), &quot;\n&quot;)</code></pre>
 <pre><code>## Firms: 3269</code></pre>
-<p>The missingness-by-wave breakdown was verified in the cleaning script
-and will not be reproduced here. The following chunk will be to code the
-samples for each interaction regression.</p>
+<p>The missingness-by-wave breakdown for the covariates is in the
+data-cleaning script. Based on those checks, we define a common set of
+controls consisting of covariates present across all three waves and
+construct moderator-specific estimation samples (only the same_exp
+regression is restricted to Waves 0 and 1).</p>
 <pre class="r"><code>moderators &lt;- c(&quot;language_skills&quot;, &quot;extracurricular_skills&quot;, &quot;same_exp&quot;)
 moderator_waves &lt;- list(
   language_skills = c(0, 1, 2),
@@ -482,18 +483,16 @@ moderator_waves &lt;- list(
   same_exp = c(0, 1)
 )
 
-# Defining control sets (covariates to held constant)
-# Include only controls observed in all waves used for each model.
-# reference, accreditation, legal: excluded (missing in Waves 0 and 1).
-# same_exp: one of the moderators but excluded from the full-wave models (missing in Wave 2).
-moderator_controls &lt;- list(
-  language_skills = c(&quot;extracurricular_skills&quot;, &quot;female&quot;,
-                      &quot;ba_quality&quot;, &quot;ma&quot;, &quot;exp_highquality&quot;),
-  extracurricular_skills = c(&quot;language_skills&quot;, &quot;female&quot;,
-                             &quot;ba_quality&quot;, &quot;ma&quot;, &quot;exp_highquality&quot;),
-  same_exp = c(&quot;language_skills&quot;, &quot;extracurricular_skills&quot;, &quot;female&quot;,
-               &quot;ba_quality&quot;, &quot;ma&quot;, &quot;exp_highquality&quot;)
+# Will be using common control set for all 3 interaction regressions with covariates observed across all three waves
+
+common_controls &lt;- c(
+  &quot;female&quot;,
+  &quot;ba_quality&quot;,
+  &quot;ma&quot;,
+  &quot;exp_highquality&quot;
 )
+
+#define moderator-specific samples 
 
 moderator_samples &lt;- setNames(lapply(moderators, function(x) {
   dat %&gt;%
@@ -553,49 +552,86 @@ kable(sample_summary, caption = &quot;Moderator-specific estimation samples&quot
 </div>
 <div id="baseline-average-treatment-effect" class="section level1">
 <h1>3. Baseline average treatment effect</h1>
-<p>We estimate a wave-adjusted linear probability model:</p>
-<p><span class="math display">\[
-Y_i = \beta_0 + \beta_1 D_i + \delta_t + \varepsilon_i
-\]</span></p>
+<p>We estimate the average immigrant-name treatment effect using a
+linear probability model with wave fixed effects and firm-clustered
+(CR2) standard errors. We report estimates with and without controls,
+using the same common control set as the ex-ante interaction
+regressions, to assess the sensitivity of the estimated treatment effect
+to their inclusion.</p>
+<p><span class="math display">\[Y_i = \beta_0 + \beta_1 D_i +
+\gamma&#39; Z_i + \delta_t + \varepsilon_i\]</span></p>
 <p>Here, <span class="math inline">\(\beta_1\)</span> represents the
-average effect of an immigrant-sounding name on callback probability,
-controlling for wave fixed effects. This wave-adjusted specification is
-our baseline ATE estimate, with standard errors clustered by
-<code>firmid</code> using CR2.</p>
+estimated average effect of an immigrant-sounding name on callback
+probability. <span class="math inline">\(Z_i\)</span> denotes the common
+control set, which is omitted in the specification without controls,
+while <span class="math inline">\(\delta_t\)</span> represents wave
+fixed effects. Standard errors are clustered by firmid using CR2.</p>
 <pre class="r"><code># Estimate wave-adjusted ATE
-ate_wave &lt;- lm_robust(
+# ATE without controls (wave FE only)
+ate_no_controls &lt;- lm_robust(
   callback ~ D + wave,
   data = dat,
   clusters = firmid,
   se_type = &quot;CR2&quot;
 )
 
-# Extract treatment effect and inference statistics
-results &lt;- broom::tidy(ate_wave, conf.int = TRUE)
-treatment &lt;- results[results$term == &quot;D&quot;, ]
-
-ate_table &lt;- data.frame(
-  estimate = treatment$estimate,
-  se = treatment$std.error,
-  ci_low = treatment$conf.low,
-  ci_high = treatment$conf.high,
-  n = nobs(ate_wave),
-  firm_clusters = n_distinct(dat$firmid)
+# ATE with controls (common control set + wave FE)
+ate_with_controls &lt;- lm_robust(
+  reformulate(c(&quot;D&quot;, common_controls, &quot;wave&quot;), response = &quot;callback&quot;),
+  data = dat,
+  clusters = firmid,
+  se_type = &quot;CR2&quot;
 )
+
+# Extract treatment effect and inference statistics
+ate_models &lt;- list(
+  &quot;Without controls&quot; = ate_no_controls,
+  &quot;With controls&quot; = ate_with_controls
+)
+
+# Extract treatment effect and inference statistics
+
+ate_table &lt;- bind_rows(lapply(names(ate_models), function(nm) {
+  fit &lt;- ate_models[[nm]]
+
+  results &lt;- broom::tidy(fit, conf.int = TRUE)
+  treatment &lt;- results[results$term == &quot;D&quot;, ]
+
+  data.frame(
+    specification = nm,
+    estimate = treatment$estimate,
+    se = treatment$std.error,
+    ci_low = treatment$conf.low,
+    ci_high = treatment$conf.high,
+    n = nobs(fit),
+    firm_clusters = n_distinct(dat$firmid)
+  )
+}))
 
 knitr::kable(
   ate_table,
   digits = 4,
   col.names = c(
-    &quot;Treatment effect&quot;, &quot;SE&quot;, &quot;CI lower&quot;, &quot;CI upper&quot;,
-    &quot;N&quot;, &quot;Firm clusters&quot;
+    &quot;Specification&quot;, &quot;Treatment effect&quot;, &quot;SE&quot;,
+    &quot;CI lower&quot;, &quot;CI upper&quot;, &quot;N&quot;, &quot;Firm clusters&quot;
   ),
-  caption = &quot;Average Immigrant-Name Treatment Effect&quot;
+  caption = &quot;Average Immigrant-Name Treatment Effect With and Without Controls&quot;
 )</code></pre>
 <table>
-<caption>Average Immigrant-Name Treatment Effect</caption>
+<caption>Average Immigrant-Name Treatment Effect With and Without
+Controls</caption>
+<colgroup>
+<col width="21%" />
+<col width="21%" />
+<col width="8%" />
+<col width="11%" />
+<col width="11%" />
+<col width="6%" />
+<col width="17%" />
+</colgroup>
 <thead>
 <tr class="header">
+<th align="left">Specification</th>
 <th align="right">Treatment effect</th>
 <th align="right">SE</th>
 <th align="right">CI lower</th>
@@ -606,6 +642,7 @@ knitr::kable(
 </thead>
 <tbody>
 <tr class="odd">
+<td align="left">Without controls</td>
 <td align="right">-0.0443</td>
 <td align="right">0.0069</td>
 <td align="right">-0.0579</td>
@@ -613,13 +650,25 @@ knitr::kable(
 <td align="right">5657</td>
 <td align="right">3269</td>
 </tr>
+<tr class="even">
+<td align="left">With controls</td>
+<td align="right">-0.0442</td>
+<td align="right">0.0069</td>
+<td align="right">-0.0578</td>
+<td align="right">-0.0307</td>
+<td align="right">5657</td>
+<td align="right">3269</td>
+</tr>
 </tbody>
 </table>
-<p>The estimated average treatment effect indicates that resumes with
-immigrant-sounding names receive callbacks at a rate 4.43 percentage
-points lower than those with English-sounding names, adjusted for wave
-fixed effects. This effect is statistically significant at the 5% level,
-with a 95% confidence interval of [−0.0579, −0.0307].</p>
+<p>The estimated average treatment effect is −0.0443 without controls
+and −0.0442 with controls, indicating that resumes with immigrant
+sounding names receive approximately 4.4 percentage points fewer
+callbacks than those with English sounding names. Both estimates are
+statistically significant at the 5% level, with 95% confidence intervals
+excluding zero. There is negligible difference between the estimates
+with and without controls, suggesting that the estimated average name
+penalty is robust to the inclusion of controls.</p>
 <p>Note: Our extension uses firm-clustered CR2 standard errors to
 account for potential dependence between multiple resumes submitted to
 the same employer. Unlike Oreopoulos (2011), which uses
@@ -646,8 +695,10 @@ estimate the following linear probability model:</p>
 Y_i = \beta_0 + \beta_1 D_i + \beta_2 X_i + \beta_3(D_i \times X_i) +
 \gamma&#39;Z_i + \delta_{w(i)} + \varepsilon_i
 \]</span></p>
-<p>The three regressions use the moderator-specific estimation samples
-and control sets defined in Section 2. Here, <span class="math inline">\(\beta_1\)</span> represents the immigrant-name
+<p>The three regressions use a common set of controls including female,
+ba_quality, ma, and exp_highquality, alongside wave fixed effects. The
+estimation samples differ only for same_exp, which is restricted to
+Waves 0 and 1 due to structural missingness in Wave 2. Here, <span class="math inline">\(\beta_1\)</span> represents the immigrant-name
 effect when <span class="math inline">\(X=0\)</span>, <span class="math inline">\(\beta_2\)</span> captures the effect of the
 moderator when <span class="math inline">\(D=0\)</span>, and <span class="math inline">\(\beta_3\)</span> tests whether the immigrant-name
 effect differs between <span class="math inline">\(X=1\)</span> and
@@ -656,7 +707,7 @@ effect differs between <span class="math inline">\(X=1\)</span> and
 
 fit_interaction &lt;- function(x) {
 
-  controls &lt;- moderator_controls[[x]]
+  controls &lt;- common_controls
 
   rhs &lt;- c(
     &quot;D&quot;,
@@ -679,7 +730,51 @@ fit_interaction &lt;- function(x) {
 models &lt;- setNames(
   lapply(moderators, fit_interaction),
   moderators
-)</code></pre>
+)
+
+sample_check &lt;- data.frame(
+  moderator = moderators,
+  expected_n = unname(sapply(moderator_samples, nrow)),
+  actual_n = unname(sapply(models, nobs))
+)
+
+sample_check$dropped &lt;- sample_check$expected_n - sample_check$actual_n
+
+knitr::kable(sample_check)</code></pre>
+<table>
+<thead>
+<tr class="header">
+<th align="left">moderator</th>
+<th align="right">expected_n</th>
+<th align="right">actual_n</th>
+<th align="right">dropped</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td align="left">language_skills</td>
+<td align="right">5657</td>
+<td align="right">5657</td>
+<td align="right">0</td>
+</tr>
+<tr class="even">
+<td align="left">extracurricular_skills</td>
+<td align="right">5657</td>
+<td align="right">5657</td>
+<td align="right">0</td>
+</tr>
+<tr class="odd">
+<td align="left">same_exp</td>
+<td align="right">3397</td>
+<td align="right">3397</td>
+<td align="right">0</td>
+</tr>
+</tbody>
+</table>
+<pre class="r"><code>stopifnot(all(sample_check$dropped == 0))</code></pre>
+<p>This check verifies that the interaction regressions retain their
+intended sample sizes and that no additional observations are silently
+dropped by lm_robust() due to missing values in the controls.</p>
 <pre class="r"><code># Extract interaction coefficients (beta_3) from each regression
 interaction_table &lt;- bind_rows(lapply(moderators, function(x) {
 
@@ -744,33 +839,33 @@ knitr::kable(
 <tbody>
 <tr class="odd">
 <td align="left">language_skills</td>
-<td align="right">-0.0144</td>
+<td align="right">-0.0141</td>
 <td align="right">0.0200</td>
-<td align="right">-0.0535</td>
-<td align="right">0.0248</td>
-<td align="right">0.4715</td>
+<td align="right">-0.0533</td>
+<td align="right">0.0250</td>
+<td align="right">0.4792</td>
 <td align="left">0, 1, 2</td>
 <td align="right">5657</td>
 <td align="right">3269</td>
 </tr>
 <tr class="even">
 <td align="left">extracurricular_skills</td>
-<td align="right">0.0307</td>
+<td align="right">0.0311</td>
 <td align="right">0.0183</td>
-<td align="right">-0.0052</td>
-<td align="right">0.0667</td>
-<td align="right">0.0939</td>
+<td align="right">-0.0049</td>
+<td align="right">0.0670</td>
+<td align="right">0.0903</td>
 <td align="left">0, 1, 2</td>
 <td align="right">5657</td>
 <td align="right">3269</td>
 </tr>
 <tr class="odd">
 <td align="left">same_exp</td>
-<td align="right">0.0289</td>
+<td align="right">0.0293</td>
 <td align="right">0.0221</td>
-<td align="right">-0.0144</td>
-<td align="right">0.0722</td>
-<td align="right">0.1912</td>
+<td align="right">-0.0139</td>
+<td align="right">0.0726</td>
+<td align="right">0.1837</td>
 <td align="left">0, 1</td>
 <td align="right">3397</td>
 <td align="right">1927</td>
@@ -779,20 +874,109 @@ knitr::kable(
 </table>
 <p>The results provide limited evidence of heterogeneity across the
 three pre-specified moderators. Language skills have a negative
-interaction coefficient (−0.0144), contrary to our hypothesis, but the
-estimate is not statistically significant (p = 0.4715). Extracurricular
-activities have a positive interaction coefficient (0.0307), suggesting
+interaction coefficient (−0.0141), contrary to our hypothesis, but the
+estimate is not statistically significant (p = 0.4792). Extracurricular
+activities have a positive interaction coefficient (0.0311), suggesting
 a smaller immigrant-name penalty when extracurricular activities are
 listed. However, this effect is only significant at the 10% level (p =
-0.0939). Multinational firm experience also has a positive interaction
-coefficient (0.0289), but the estimate is not statistically significant
-(p = 0.1912).</p>
+0.0903). Multinational firm experience also has a positive interaction
+coefficient (0.0293), but the estimate is not statistically significant
+(p = 0.1837).</p>
 <p><em>Overall, none of the three interaction coefficients is
 statistically significant at the 5% level.</em> Hence, the ex-ante
 regressions do not provide strong evidence that these resume
 characteristics systematically moderate the immigrant-name penalty. The
 subsequent subgroup treatment-effect analysis examines the magnitude and
 uncertainty of the implied name penalty for X=0 and X=1.</p>
+<p>Since treatment assignment is randomized, control variables are not
+required for identification but may improve precision. We assess the
+sensitivity of the interaction estimates to inclusion of controls by
+comparing β₃ across specifications with and without the common control
+set. Both specifications retain wave fixed effects and firm-clustered
+(CR2) standard errors.</p>
+<pre class="r"><code># Interaction regressions without additional controls
+models_no_controls &lt;- setNames(
+  lapply(moderators, function(x) {
+    lm_robust(
+      reformulate(
+        c(&quot;D&quot;, x, paste0(&quot;D:&quot;, x), &quot;wave&quot;),
+        response = &quot;callback&quot;
+      ),
+      data = moderator_samples[[x]],
+      clusters = firmid,
+      se_type = &quot;CR2&quot;
+    )
+  }),
+  moderators
+)
+
+# Compare interaction coefficients
+robustness_table &lt;- bind_rows(lapply(moderators, function(x) {
+  term &lt;- paste0(&quot;D:&quot;, x)
+
+  data.frame(
+    Moderator = x,
+    Without_controls = unname(coef(models_no_controls[[x]])[term]),
+    With_controls = unname(coef(models[[x]])[term])
+  )
+}))
+
+robustness_table$Difference &lt;- (
+  robustness_table$With_controls - robustness_table$Without_controls
+)
+
+knitr::kable(
+  robustness_table,
+  digits = 4,
+  col.names = c(
+    &quot;Moderator&quot;, &quot;β₃ without controls&quot;,
+    &quot;β₃ with controls&quot;, &quot;Difference&quot;
+  ),
+  caption = &quot;Robustness of Interaction Estimates to Controls&quot;
+)</code></pre>
+<table>
+<caption>Robustness of Interaction Estimates to Controls</caption>
+<colgroup>
+<col width="32%" />
+<col width="28%" />
+<col width="23%" />
+<col width="15%" />
+</colgroup>
+<thead>
+<tr class="header">
+<th align="left">Moderator</th>
+<th align="right">β₃ without controls</th>
+<th align="right">β₃ with controls</th>
+<th align="right">Difference</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td align="left">language_skills</td>
+<td align="right">-0.0123</td>
+<td align="right">-0.0141</td>
+<td align="right">-0.0019</td>
+</tr>
+<tr class="even">
+<td align="left">extracurricular_skills</td>
+<td align="right">0.0317</td>
+<td align="right">0.0311</td>
+<td align="right">-0.0006</td>
+</tr>
+<tr class="odd">
+<td align="left">same_exp</td>
+<td align="right">0.0302</td>
+<td align="right">0.0293</td>
+<td align="right">-0.0009</td>
+</tr>
+</tbody>
+</table>
+<p>The interaction coefficients change only slightly with the inclusion
+of controls (with the largest difference being 0.19 percentage points
+for language skills). This is consistent with the expectation that,
+under randomization, additional controls should primarily improve
+precision rather than significantly affect the estimated interaction
+effects.</p>
 </div>
 <div id="regression-implied-subgroup-treatment-effects" class="section level1">
 <h1>5. Regression-implied subgroup treatment effects</h1>
@@ -809,33 +993,48 @@ for the covariance between <span class="math inline">\(\hat{\beta}_1\)</span> an
 = \operatorname{Var}(\hat{\beta}_1)
 + \operatorname{Var}(\hat{\beta}_3)
 + 2\operatorname{Cov}(\hat{\beta}_1,\hat{\beta}_3)
-\]</span></p>
+\]</span> In this code, subgroup treatment effects are obtained through
+an equivalent reparameterisation of the interaction regressions,
+allowing β₁ for X=0 and β₁ + β₃ for X=1 to be estimated directly, such
+that firm-clustered CR2 standard errors and confidence intervals can be
+calculated using lm_robust() without additional approximations.</p>
 <pre class="r"><code>subgroup_effects &lt;- bind_rows(lapply(moderators, function(x) {
-  m &lt;- models[[x]]
+
   s &lt;- moderator_samples[[x]]
-  b &lt;- coef(m)
-  V &lt;- vcov(m)
-  interaction &lt;- paste0(&quot;D:&quot;, x)
-  out &lt;- lapply(0:1, function(z) {
-    a &lt;- setNames(rep(0, length(b)), names(b))
-    a[&quot;D&quot;] &lt;- 1
-    if (z == 1) a[interaction] &lt;- 1
-    estimate &lt;- sum(a * b)
-    se &lt;- sqrt(drop(t(a) %*% V %*% a))
-    # Conservative approximation using available coefficient-specific CR2 df.
-    # The exact contrast-specific small-sample df may differ.
-    involved &lt;- if (z == 0) &quot;D&quot; else c(&quot;D&quot;, interaction)
-    df &lt;- min(m$df[match(involved, names(b))], na.rm = TRUE)
-    crit &lt;- qt(0.975, df = df)
-    data.frame(moderator = x, subgroup = paste0(&quot;X=&quot;, z),
-               estimate = estimate, se = se,
-               ci_low = estimate - crit * se,
-               ci_high = estimate + crit * se,
-               n_subgroup = sum(s[[x]] == z),
-               firm_clusters_subgroup = n_distinct(s$firmid[s[[x]] == z]))
-  })
-  bind_rows(out)
+  s$m &lt;- s[[x]]
+  s$m0 &lt;- 1 - s$m
+
+  # Reparameterise the original interaction regression: D:m0 = beta1 (X=0); D:m  = beta1 + beta3 (X=1)
+  f &lt;- reformulate(
+    c(&quot;D:m0&quot;, &quot;D:m&quot;, &quot;m&quot;, common_controls, &quot;wave&quot;),
+    response = &quot;callback&quot;
+  )
+
+  fit &lt;- lm_robust(
+    f,
+    data = s,
+    clusters = firmid,
+    se_type = &quot;CR2&quot;
+  )
+
+  # Extract subgroup treatment effects and CR2 inference
+  bind_rows(lapply(0:1, function(z) {
+
+    term &lt;- if (z == 0) &quot;D:m0&quot; else &quot;D:m&quot;
+
+    data.frame(
+      moderator = x,
+      subgroup = paste0(&quot;X=&quot;, z),
+      estimate = unname(coef(fit)[term]),
+      se = unname(fit$std.error[term]),
+      ci_low = unname(fit$conf.low[term]),
+      ci_high = unname(fit$conf.high[term]),
+      n_subgroup = sum(s$m == z),
+      firm_clusters_subgroup = n_distinct(s$firmid[s$m == z])
+    )
+  }))
 }))
+
 knitr::kable(
   subgroup_effects,
   digits = 4,
@@ -885,55 +1084,65 @@ Subgroups</caption>
 <tr class="even">
 <td align="left">language_skills</td>
 <td align="left">X=1</td>
-<td align="right">-0.0550</td>
-<td align="right">0.0167</td>
-<td align="right">-0.0878</td>
-<td align="right">-0.0221</td>
+<td align="right">-0.0548</td>
+<td align="right">0.0168</td>
+<td align="right">-0.0877</td>
+<td align="right">-0.0219</td>
 <td align="right">1424</td>
 <td align="right">1238</td>
 </tr>
 <tr class="odd">
 <td align="left">extracurricular_skills</td>
 <td align="left">X=0</td>
-<td align="right">-0.0628</td>
+<td align="right">-0.0630</td>
 <td align="right">0.0130</td>
-<td align="right">-0.0883</td>
-<td align="right">-0.0372</td>
+<td align="right">-0.0885</td>
+<td align="right">-0.0375</td>
 <td align="right">2240</td>
 <td align="right">2016</td>
 </tr>
 <tr class="even">
 <td align="left">extracurricular_skills</td>
 <td align="left">X=1</td>
-<td align="right">-0.0320</td>
+<td align="right">-0.0319</td>
 <td align="right">0.0101</td>
-<td align="right">-0.0518</td>
-<td align="right">-0.0123</td>
+<td align="right">-0.0517</td>
+<td align="right">-0.0122</td>
 <td align="right">3417</td>
 <td align="right">2694</td>
 </tr>
 <tr class="odd">
 <td align="left">same_exp</td>
 <td align="left">X=0</td>
-<td align="right">-0.0578</td>
+<td align="right">-0.0581</td>
 <td align="right">0.0128</td>
-<td align="right">-0.0829</td>
-<td align="right">-0.0327</td>
+<td align="right">-0.0832</td>
+<td align="right">-0.0330</td>
 <td align="right">1899</td>
 <td align="right">1378</td>
 </tr>
 <tr class="even">
 <td align="left">same_exp</td>
 <td align="left">X=1</td>
-<td align="right">-0.0289</td>
+<td align="right">-0.0288</td>
 <td align="right">0.0156</td>
-<td align="right">-0.0596</td>
-<td align="right">0.0018</td>
+<td align="right">-0.0594</td>
+<td align="right">0.0019</td>
 <td align="right">1498</td>
 <td align="right">1127</td>
 </tr>
 </tbody>
 </table>
+<p>The subgroup treatment effects represent the estimated immigrant-name
+penalty at X=0 (β₁) and X=1 (β₁ + β₃), with the difference between the
+two corresponding to the interaction coefficient β₃.</p>
+<p>For language skills, the estimated name penalty increases from 4.06
+to 5.48 percentage points when X = 1 (β₃ = −0.0141). The name penalty
+decreases from 6.30 to 3.19 percentage points for extracurricular
+activities (β₃ = 0.0311), and from 5.81 to 2.88 percentage points for
+multinational firm experience (β₃ = 0.0293). As earlier established, the
+differences in name penalty across subgroups (β₃) are all statistically
+insignificant.</p>
 <p>The subgroup treatment effects estimated from the interaction
 regressions will be compared with corresponding subgroup average
 treatment effects (ATEs) estimated using the causal forest. Both
