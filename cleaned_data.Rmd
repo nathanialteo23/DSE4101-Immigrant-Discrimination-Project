@@ -36,35 +36,24 @@ df <- read_dta(data_path)
 
 ```{r}
 vars <- c("type", "female", "ba_quality", "extracurricular_skills", "language_skills",
-          "ma", "same_exp", "exp_highquality", "reference", "accreditation", "legal",
-          "fall_data")
+          "ma", "same_exp", "exp_highquality", "fall_data")
 
-# Variables excluded from `vars` and reasons:
-# 1. Ethnicity and name variables [name_ethnicity, name, chinese, indian, british, 
+# Variables excluded and reasons:
+# 1. Variables with no variation [reference, accreditation, legal]
+#    After filtering for Type 0 and Type 1 and excluding Chinese Canadians, these          variables contain only 0 or NA.
+#    These variables have no variation in the filtered sample and are not useful for       our main analysis.
+# 2. Ethnicity and name variables [name_ethnicity, name, chinese, indian, british, 
 #    pakistani, chn_cdn]:
-#    We are interested in the effect of having a foreign name on callback, rather 
-#    than differences across specific ethnicities.
-#    These variables identify specific names or ethnic groups and are not
-#    needed for our main analysis.
-#
-# 2. Firm and occupation variables [firmid, city, 
+#    We are interested in the effect of having a foreign name on callback, rather than      differences across specific ethnicities. 
+#    These variables identify specific names or ethnic groups and are not needed for       our main analysis.
+# 3. Firm and occupation variables [firmid, city, 
 #    additional_credential,occupation_type, skillspeaking, skillsocialper,
 #    skillwriting]:
-#    Our research question is about heterogeneity across resume
-#    characteristics, but these variables describe the firm or job posting,
-#    not the resume.
-#
-# 3. listedaccreditation, certificate:
-#    No definition found in the paper or README file, so we could not confirm what they
-#    measure or whether they are pre-treatment. Excluded to avoid including variables 
-#    with unclear meaning.
-#
-# 4. Other callback-related outcomes [interview, second_callback]:
-#    These variables are excluded because our outcome of interest is callback.
-#    interview indicates whether the callback specifically mentioned an
-#    interview, while second_callback indicates whether the resume received
-#    two callbacks. Including these post-treatment variables as predictors could       #    introduce outcome leakage because they describe aspects of the callback outcome
-#    rather than characteristics known independently of it.
+#    Our research question is about heterogeneity across resume characteristics, but       these variables describe the firm or job posting, not the resume.
+# 4. Unknown variables [listedaccreditation, certificate]:
+#    No definition found in the paper or README file, so we could not confirm what         they measure or whether they are pre-treatment. Excluded to avoid including           variables with unclear meaning.
+# 5. Other callback-related outcomes [interview, second_callback]:
+#    These variables are excluded because our outcome of interest is callback.             Including these post-treatment variables as predictors could introduce outcome        leakage because they describe aspects of the callback outcome rather than             characteristics known independently of it.
 
 ```
 
