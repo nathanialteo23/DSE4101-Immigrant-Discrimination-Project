@@ -36,12 +36,53 @@ df <- read_dta(data_path)
 
 ```{r}
 vars <- c("type", "female", "ba_quality", "extracurricular_skills", "language_skills",
-          "ma", "same_exp", "exp_highquality", "fall_data")
+          "ma", "same_exp", "exp_highquality", "fall_data", "reference",
+          "accreditation", "legal")
+```
+
+
+```{r}
+length(vars)
+
+df_int1 <- df %>%
+  filter(
+    type %in% c(0, 1),
+    name_ethnicity %in% c("Canada", "Chinese", "Indian", "Pakistani")
+  )
+```
+
+
+```{r}
+# Counts of 0s, 1s and Missing Values by Variable
+
+counts <- df_int1 %>%
+  select(all_of(vars)) %>%
+  pivot_longer(everything(), names_to = "variable", values_to = "value") %>%
+  group_by(variable) %>%
+  summarise(
+    n_0 = sum(value == 0, na.rm = TRUE),
+    n_1 = sum(value == 1, na.rm = TRUE),
+    n_missing = sum(is.na(value)),
+    .groups = "drop"
+  ) %>%
+  arrange(match(variable, vars))
+
+View(counts)
+```
+
+
+```{r}
+# Exclude reference, accreditation, and legal as they don't provide any useful information (contain only 0 or NA after filtering)
+
+vars <- setdiff(vars, c("reference", "accreditation", "legal"))
+```
 
 # Variables excluded and reasons:
 # 1. Variables with no variation [reference, accreditation, legal]
-#    After filtering for Type 0 and Type 1 and excluding Chinese Canadians, these          variables contain only 0 or NA.
-#    These variables have no variation in the filtered sample and are not useful for       our main analysis.
+#    After filtering for Type 0 and Type 1 and excluding Greek and Chinese-Canadian
+#    names, these variables contain only 0s or missing values.
+#    As they exhibit no variation in the filtered sample, they provide no useful
+#    information for our main analysis.
 # 2. Ethnicity and name variables [name_ethnicity, name, chinese, indian, british, 
 #    pakistani, chn_cdn]:
 #    We are interested in the effect of having a foreign name on callback, rather than      differences across specific ethnicities. 
@@ -54,18 +95,6 @@ vars <- c("type", "female", "ba_quality", "extracurricular_skills", "language_sk
 #    No definition found in the paper or README file, so we could not confirm what         they measure or whether they are pre-treatment. Excluded to avoid including           variables with unclear meaning.
 # 5. Other callback-related outcomes [interview, second_callback]:
 #    These variables are excluded because our outcome of interest is callback.             Including these post-treatment variables as predictors could introduce outcome        leakage because they describe aspects of the callback outcome rather than             characteristics known independently of it.
-
-```
-
-```{r}
-length(vars)
-
-df_int1 <- df %>%
-  filter(
-    type %in% c(0, 1),
-    name_ethnicity %in% c("Canada", "Chinese", "Indian", "Pakistani")
-  )
-```
 
 
 ```{r}
