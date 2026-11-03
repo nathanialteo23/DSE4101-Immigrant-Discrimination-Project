@@ -602,6 +602,13 @@ knitr::kable(
 The three pre-specified moderators are language skills, extracurricular skills and multinational experience (same_exp). For each moderator m the regression is `callback ~ D * m + wave fixed effects`, with firm-clustered (CR2) standard errors, fitted only on the resumes where m is observed. It gives the name effect when m = 0, the name effect when m = 1, and the interaction beta3 (the change in the name effect when m goes from 0 to 1), which is the formal test of whether the penalty differs. The forest columns are doubly robust ATEs from cf2 computed with `subset = !is.na(m) & m == value`, so they come from exactly the same resumes as the regression and the two sets of numbers can be compared side by side. same_exp is only observed in waves 0-1, so its rows use those waves only. This table is the main moderator result whatever the validation section finds.
 
 ```{r moderator-table}
+common_controls <- c(
+  "female",
+  "ba_quality",
+  "ma",
+  "exp_highquality"
+)
+
 moderator_rows <- function(v) {
   obs   <- !is.na(df_int1[[v]])            # resumes where the moderator is observed
   dat   <- df_int1[obs, ]
@@ -610,13 +617,26 @@ moderator_rows <- function(v) {
   dat$m0 <- 1 - dat$m
 
   # beta3: name x moderator interaction
-  fit_int <- lm_robust(y ~ D * m + factor(fall_data), data = dat,
-                       clusters = firmid, se_type = "CR2")
+  fit_int <- lm_robust(
+    reformulate(
+      c("D", "m", "D:m", common_controls, "factor(fall_data)"),
+      response = "y"
+    ),
+    data = dat,
+    clusters = firmid,
+    se_type = "CR2"
+  )
   # The same model written so the two name effects come out directly:
   # D:m0 = name effect when m = 0, D:m = name effect when m = 1
-  fit_grp <- lm_robust(y ~ D:m0 + D:m + m + factor(fall_data), data = dat,
-                       clusters = firmid, se_type = "CR2")
-
+  fit_grp <- lm_robust(
+    reformulate(
+      c("D:m0", "D:m", "m", common_controls, "factor(fall_data)"),
+      response = "y"
+    ),
+    data = dat,
+    clusters = firmid,
+    se_type = "CR2"
+  )
   forest_effect <- function(value) {
     idx <- which(obs & df_int1[[v]] == value)
     a   <- average_treatment_effect(cf2, subset = idx)
