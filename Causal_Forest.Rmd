@@ -15,6 +15,7 @@ This document runs in four stages: **diagnostic tests** on the sample, **causal 
 
 # Setup and data preparation
 
+## Downloading required packages
 ```{r packages, message=FALSE, warning=FALSE}
 required_packages <- c("estimatr", "dplyr", "tidyr", "grf", "knitr")
 missing_packages  <- setdiff(required_packages, rownames(installed.packages()))
@@ -26,9 +27,12 @@ library(ggplot2)
 library(dplyr)
 library(tidyr)
 library(grf)
+
 library(knitr)
 ```
 
+## Loading data
+Obtaining cleaned_data.Rda from running cleaned_data.rmd
 ```{r load-data}
 # cleaned_data.Rmd builds and saves the analysis sample (df_int1)
 rda_path <- "cleaned data.Rda"
@@ -40,9 +44,9 @@ loaded <- load(rda_path)
 stopifnot("df_int1" %in% loaded)
 ```
 
+## Forming the pretreatment covariate variables and moderators
+This selects pre-treatment covariates that may explain heterogeneity in treatment effects
 ```{r analysis-sample}
-# Pre-treatment resume characteristics. Keep this order: grf picks split variables by
-# column position, so the forests only reproduce exactly with the same order.
 all_pretreat_cov <- c(
   "language_skills",
   "female",
@@ -52,7 +56,6 @@ all_pretreat_cov <- c(
   "same_exp",
   "exp_highquality"
   )
-
 # df_int1 comes from cleaned_data.Rmd: Canadian-named (control) and Chinese/Indian/
 # Pakistani-named (treated) resumes, D = 1 for a foreign name.
 # Missing values are NOT recoded there: same_exp is NA for every resume in wave 2, and
@@ -60,8 +63,31 @@ all_pretreat_cov <- c(
 # (see the missing-value check below). grf uses missing covariate values directly; the
 # tables that need observed values (balance, moderator table, BLP) use waves 0-1 for same_exp.
 
-# The wave is saved as a factor with three levels (0, 1, 2). It enters X as two dummies,
-# wave_1 and wave_2 (wave 0 is the reference), so a single split can isolate any wave.
+
+```
+
+## Setting our ex-ante moderators
+We pre-specify three resume characteristics as potential moderators of the immigrant-name penalty, motivated by the hypothesis that credible signals of applicant productivity may reduce employers' reliance on group-based signals (i.e. immigrant-sounding names).
+
+- Language proficiency (language_skills): Language proficiency is an important consideration in employers' hiring of immigrant applicants (Oreopoulos, 2011; Carlsson et al., 2023). It may signal workplace communication abilities and expected productivity, while also serving as an indicator of cultural assimilation (Fossati et al., 2020). Explicit language proficiency signals may therefore reduce employer uncertainty and potentially mitigate the immigrant-name penalty.
+
+- Extracurricular activities (extracurricular_skills): Extracurricular activities (e.g. volunteering) can signal otherwise unobserved soft skills and personal characteristics valued by employers (Alfonso-Costillo et al., 2021), and serve as indicators of cultural assimilation (Fossati et al., 2020), potentially reducing employer uncertainty and mitigating the immigrant-name penalty.
+
+- Multinational firm experience (same_exp): Experience at multinational firms may signal transferable professional skills, including communication and familiarity with established workplace practices (Guillouet et al., 2021). Such signals may reduce employer uncertainty about immigrant applicants' productivity and potentially mitigate the immigrant-name penalty.
+
+```{r Moderators}
+moderators <- c(
+  "language_skills",
+  "extracurricular_skills",
+  "same_exp"
+)
+
+```
+
+## Data transformation
+The wave is saved as a factor with three levels (0, 1, 2). It enters X as two dummies, wave_1 and wave_2 (wave 0 is the reference), so a single split can isolate any wave as causal forest does not accept factor variables.
+
+```{r}
 df_int1 <- df_int1 %>%
   mutate(
     wave_1 = as.integer(fall_data == 1),
@@ -106,7 +132,7 @@ counts_all <- df_int1 %>%
 print(counts_all, n = Inf)
 ```
 
-## Sample and treatment coding
+## Statistics about the data
 
 ```{r sanity-checks}
 cat("N:", nrow(df_int1), "(expected 5,657)\n")
@@ -126,7 +152,13 @@ print(table(wave = df_int1$fall_data, D = df_int1$D))
 
 ## Name penalty by wave
 
-Does the name penalty itself differ by wave? Plain regression of callback on D within each wave, so no forest is involved.
+Does the name penalty itself differ by wave? Plain regression of callback on D within each wave, so no forest is involved. 
+
+- Treatment effect: The coefficient on D measures the difference in callback probability between foreign-named and Canadian-named applicants, expressed in percentage points.
+
+- Clustered standard errors: Uses firm-clustered CR2 standard errors to account for correlation between resumes submitted to the same employer.
+
+- Comparison across waves: Reports the estimated treatment effect, standard error, and 95% confidence interval for each wave.
 
 ```{r ate-by-wave}
 ate_wave <- bind_rows(lapply(waves, function(k) {
@@ -146,44 +178,14 @@ kable(ate_wave, digits = 2,
 ```
 
 
+
 ## Overlap/Propensity check
-```{r forest-specs-for-prop-check}
-# Three pre-specified moderators
-moderators <- c(
-  "language_skills",
-  "extracurricular_skills",
-  "same_exp"
-)
-
-# Covariate specifications for both forests
-covariate_sets <- list(
-  "cf1w (3 moderators + wave)" = c(
-    moderators,
-    "wave_1",
-    "wave_2"
-  ),
-
-  "cf2 (full covariates)" = c(
-    all_pretreat_cov,
-    "wave_1",
-    "wave_2"
-  )
-)
-
-# Short labels for validation tables
-short_name <- function(x) sub(" .*", "", x)
-```
-
-
-
-
+We examine the distribution of propensity scores, which estimate the probability of receiving a foreign-sounding name conditional on observed resume characteristics.
 ```{r}
 # Covariate specifications
 propensity_sets <- list(
   "cf1w (3 moderators + wave)" = c(
-    "language_skills",
-    "extracurricular_skills",
-    "same_exp",
+    moderators,
     "wave_1",
     "wave_2"
   ),
@@ -196,13 +198,14 @@ propensity_sets <- list(
 
 # Estimate propensity scores for both specifications
 propensity_results <- lapply(propensity_sets, function(vars) {
+  set.seed(4101)
 
+  # Construction of the predictor matrix
   X <- df_int1 %>%
     select(all_of(vars)) %>%
     as.matrix()
 
-  set.seed(4101)
-
+  # Fit a regression forest to predict treatment assignemnt, rather than callback outcomes. 
   propensity_forest <- regression_forest(
     X,
     W_all,
@@ -216,14 +219,23 @@ propensity_results <- lapply(propensity_sets, function(vars) {
 # Observed treatment proportion
 p_actual <- mean(W_all)
 
-# Common histogram axes for comparison
-breaks_common <- seq(0, 1, by = 0.025)
+
+
+
+# Plotting histogram
+
+
+
+## Setting axes breaks and maximum
+breaks_common <- seq(0, 1, by = 0.025) 
 
 y_max <- max(sapply(propensity_results, function(p) {
   max(hist(p, breaks = breaks_common, plot = FALSE)$counts)
-}))
+})) 
 
-# Side-by-side histograms
+
+
+## Plotting Side-by-side histograms
 par(mfrow = c(1, 2))
 
 for (nm in names(propensity_results)) {
@@ -303,7 +315,6 @@ The waves differ in design (same_exp is only on the resumes of waves 0-1, and wa
 ```{r forest-specs}
 # The wave is included in both forests: the waves differ in design, so the forest needs it
 # to separate "this moderator matters" from "this wave was different".
-moderators <- c("language_skills", "extracurricular_skills", "same_exp")
 
 covariate_sets <- list(
   "cf1w (3 moderators + wave)" = c(moderators, "wave_1","wave_2"),
@@ -317,20 +328,40 @@ short_name <- function(x) sub(" .*", "", x)
 
 
 ## Fit
+Fit causal forests for both specifications (CF1W and CF2). Both use the same outcome (callback), treatment (foreign-sounding name), and employer-level clustering, but differ in their covariates.
 
 ```{r fit-forests}
+# function to fit a causal forest for a given set of covariates.
 fit_forest <- function(vars) {
-  X <- df_int1 %>% select(all_of(vars)) %>% as.matrix()
   # grf draws its forest seed from R's random number generator, so reset the seed
   # immediately before every fit to make each forest reproducible.
   set.seed(4101)
+  
+  # Select the covariates for the current specification and convert to a matrix.
+  X <- df_int1 %>% select(all_of(vars)) %>% as.matrix()
+  
+  # Fit a causal forest to estimate heterogeneous treatment effects (CATEs).
+  # Y_all: callback outcome (0/1).
+  # W_all: foreign-sounding name treatment (0/1).
+  # clusters: accounts for dependence among resumes sent to the same employer.
+  # grf internally estimates nuisance functions, including propensity scores
+  # and expected outcomes, unless these are supplied separately.
   list(cf = causal_forest(X, Y_all, W_all, clusters = firm_id), X = X)
 }
 
+
+
+# APPLY THE FITTING FUNCTION TO BOTH COVARIATE SPECIFICATIONS
+# CF1W: three pre-specified moderators + wave indicators.
+# CF2: full set of pre-treatment covariates.
 forests <- lapply(covariate_sets, fit_forest)
 
+
+# Extract the fitted causal forest for subsequent analysis
 cf1w   <- forests[["cf1w (3 moderators + wave)"]]$cf
 cf2   <- forests[["cf2 (full covariates)"]]$cf
+
+# Save CF2's covariate matrix for subsequent interpretation and diagnostics
 X_cf2 <- forests[["cf2 (full covariates)"]]$X
 ```
 
@@ -338,20 +369,38 @@ X_cf2 <- forests[["cf2 (full covariates)"]]$X
 # Causal forest results
 
 ## Average treatment effect
+Compares the average treatment effect (ATE) of foreign-sounding names on callback probabilities across both causal forest specifications.
+- ATE estimation: Uses average_treatment_effect() to estimate the overall name penalty for each forest.
+- Full sample: Sets target.sample = "all" to estimate the ATE across all observations.
+- Statistical inference: Calculates standard errors and approximate 95% confidence intervals to assess the precision and statistical significance of the estimates.
+- Comparison across specifications: Examines whether CF1W and CF2 produce similar average treatment effects despite using different sets of covariates.
 
+
+About `average_treatment_effect` : causal forest uses propensity scores (the estimated probability of receiving treatment) when calculating the Average Treatment Effect (ATE).
 ```{r ate}
+# Loop through both forest specifications (CF1W and CF2).
 ate_tab <- bind_rows(lapply(names(forests), function(nm) {
+  
+  # Estimate the ATE using the full sample.
+  # grf uses a doubly robust estimator that accounts for
+  # estimated propensity scores and expected outcomes.
   a <- average_treatment_effect(forests[[nm]]$cf, target.sample = "all")
+  
+  # Extract the ATE estimate and standard error.
+  # Multiply by 100 to express results in percentage points.
   data.frame(forest    = nm,
              effect_pp = 100 * a[["estimate"]],
              se_pp     = 100 * a[["std.err"]])
 })) %>%
+  # Construct approximate 95% confidence intervals:
+  # ATE +/- 1.96 * standard error.
   mutate(lo_pp = effect_pp - 1.96 * se_pp, hi_pp = effect_pp + 1.96 * se_pp)
 
 kable(ate_tab, digits = 3,
       caption = "Average treatment effect by forest (percentage points)")
 ```
 
+### Interpretation of Causal forest ATE
 ```{r ate-text, results='asis'}
 for (i in seq_len(nrow(ate_tab))) {
   cat(sprintf(
@@ -362,6 +411,9 @@ for (i in seq_len(nrow(ate_tab))) {
   ))
 }
 ```
+
+
+
 
 ## Estimated effects (CATE)
 
@@ -389,38 +441,60 @@ cate_df <- bind_rows(lapply(names(forests), function(nm) {
 cate_summary <- cate_df %>%
   group_by(forest) %>%
   summarise(
-    mean_pp = 100 * mean(tau_hat),
-    sd_pp = 100 * sd(tau_hat),
-    min_pp = 100 * min(tau_hat),
-    p25_pp = 100 * quantile(tau_hat, 0.25),
-    median_pp = 100 * median(tau_hat),
-    p75_pp = 100 * quantile(tau_hat, 0.75),
-    max_pp = 100 * max(tau_hat),
-    mean_se_pp = 100 * mean(tau_se),
+    mean_pp = 100 * mean(tau_hat), # Mean predicted name penalty
+    sd_pp = 100 * sd(tau_hat), # Se of predicted effects
+    min_pp = 100 * min(tau_hat), # Smallest predicted effect
+    p25_pp = 100 * quantile(tau_hat, 0.25), # 25th percentile
+    median_pp = 100 * median(tau_hat), # Median predicted effect
+    p75_pp = 100 * quantile(tau_hat, 0.75),  # 75th percentile
+    max_pp = 100 * max(tau_hat), # Largest predicted effect
+    mean_se_pp = 100 * mean(tau_se),  # Average prediction standard error
     .groups = "drop"
   )
 
+# SUmmary statistics for causal forest specification
 kable(
   cate_summary,
   digits = 2,
   caption = "Distribution of predicted treatment effects (pp, out-of-bag)"
 )
 
-# Common bins and axes so the forests can be compared panel by panel
+
+# Preparing histogram plots and bins
+
+
+## Convert all predicted treatment effects into percentage points.
+## Common bins and axes so the forests can be compared panel by panel
 tau_all     <- 100 * cate_df$tau_hat
+
+# Create histogram bins of width 1 percentage point,
+# covering the full range of predictions from both forests.
 cate_breaks <- seq(floor(min(tau_all)), ceiling(max(tau_all)), by = 1)
+
+# Determine a common y-axis limit based on the largest bin count.
+# This prevents differences in plot scaling from distorting comparisons.
 cate_ylim   <- c(0, 1.05 * max(sapply(names(forests), function(nm) {
   max(hist(100 * cate_df$tau_hat[cate_df$forest == nm],
            breaks = cate_breaks, plot = FALSE)$counts)
 })))
 
+
+
+
+## Display the histograms side by side, one for each forest.
 par(mfrow = c(1, length(forests)))
+
+
+## Plotting histograms for each of the forests
 for (nm in names(forests)) {
 
+  # Extract predicted CATEs for the current forest.  
   tau_pp <- 100 * cate_df$tau_hat[
     cate_df$forest == nm
   ]
 
+  # Plot the distribution of predicted name penalties.
+  # Common x- and y-axis limits allow direct comparison across forests.
   hist(
     tau_pp,
     breaks = cate_breaks,
@@ -443,20 +517,9 @@ par(mfrow = c(1, 1))
 ```
 
 ### Confidence Interval of CATEs
-
-
-
-
+This chunk examines whether the estimated name penalty varies across different resume characteristics using the full causal forest specification (CF2).
 ```{r cate-ci-separate, fig.width=11, fig.height=4}
-library(ggplot2)
-library(dplyr)
 
-# Three pre-specified moderators
-moderators <- c(
-  "language_skills",
-  "extracurricular_skills",
-  "same_exp"
-)
 
 # Remaining pre-treatment covariates + wave controls
 other_covariates <- c(
@@ -465,21 +528,33 @@ other_covariates <- c(
   "wave_2"
 )
 
-# All variables to evaluate
+# Combine the pre-specified moderators and remaining covariates.
+# These variables will be used to define subgroups for CF2.
 cf2_vars <- c(moderators, other_covariates)
 
-# Calculate subgroup ATEs and standard errors
+# Estimate subgroup Average Treatment Effects (ATEs) using CF2.
+# Each subgroup is defined by a particular value of a covariate.
 subgroup_results <- lapply(cf2_vars, function(v) {
 
+  
+  # Identify all observed, non-missing values of the covariate.
+  # For binary variables, these are typically 0 and 1.
   values <- sort(unique(na.omit(df_int1[[v]])))
 
   bind_rows(lapply(values, function(val) {
 
+    
+    # Identify observations belonging to the current subgroup.
+    # Exclude observations with missing values for this covariate.
     idx <- which(
       !is.na(df_int1[[v]]) &
       df_int1[[v]] == val
     )
-
+    
+    
+    # Estimate the ATE within the selected subgroup.
+    # uses the fitted CF2 forest and its doubly robust estimator.
+    # same setting as above: target.sample = "all" estimates the ATE over the selected subgroup.
     ate <- average_treatment_effect(
       cf2,
       subset = idx,
@@ -496,7 +571,9 @@ subgroup_results <- lapply(cf2_vars, function(v) {
   }))
 })
 
-# Construct 95% confidence intervals
+
+
+# Construct 95% confidence intervals for subgroup results
 subgroup_df <- bind_rows(subgroup_results) %>%
   mutate(
     lower = effect_pp - 1.96 * se_pp,
@@ -504,9 +581,18 @@ subgroup_df <- bind_rows(subgroup_results) %>%
     group_label = value
   )
 
-# Common plotting function
+
+```
+
+## Subgroup plots
+### Plotting function for subgroups 
+
+```{r}
+## Common plotting function
 plot_subgroup_ci <- function(data, vars, title, ncol = 3) {
 
+
+  # Select the requested covariates and preserve their order.
   plot_data <- data %>%
     filter(covariate %in% vars) %>%
     mutate(
@@ -560,7 +646,15 @@ plot_subgroup_ci <- function(data, vars, title, ncol = 3) {
     )
 }
 
-# GRAPH 1: Three pre-specified moderators
+```
+
+
+### GRAPH 1: Plot subgroup ATEs for the three pre-specified moderators.
+The graph compares the estimated name penalty between resumes with and without language skills, extracurricular skills, and matching work experience.
+```{r}
+# Compare the estimated name penalty across different values
+# of language skills, extracurricular skills, and same experience.
+
 plot_moderators <- plot_subgroup_ci(
   subgroup_df,
   moderators,
@@ -573,9 +667,13 @@ print(plot_moderators)
 
 ```
 
-```{r cate-ci-pretreat-plot, fig.width=11, fig.height=7}
 
-# GRAPH 2: Other pre-treatment covariates
+### GRAPH 2: Other pre-treatment covariates
+This examines whether the estimated name penalty varies across the remaining pre-treatment resume characteristics and experimental wave indicators using CF2.
+
+```{r cate-ci-pretreat-plot, fig.width=11, fig.height=7}
+# Plot subgroup ATEs for each of the remaining pre-treatment covariates and
+# experimental wave indicators using the previously defined function.
 plot_other <- plot_subgroup_ci(
   subgroup_df,
   other_covariates,
@@ -583,9 +681,10 @@ plot_other <- plot_subgroup_ci(
   ncol = 3
 )
 
+# Plots graph
 print(plot_other)
 
-# Numerical results
+# Numerical results for all subgroups, including 3 moderators
 knitr::kable(
   subgroup_df %>%
     select(covariate, value, n, effect_pp, se_pp, lower, upper),
@@ -602,6 +701,8 @@ knitr::kable(
 The three pre-specified moderators are language skills, extracurricular skills and multinational experience (same_exp). For each moderator m the regression is `callback ~ D * m + wave fixed effects`, with firm-clustered (CR2) standard errors, fitted only on the resumes where m is observed. It gives the name effect when m = 0, the name effect when m = 1, and the interaction beta3 (the change in the name effect when m goes from 0 to 1), which is the formal test of whether the penalty differs. The forest columns are doubly robust ATEs from cf2 computed with `subset = !is.na(m) & m == value`, so they come from exactly the same resumes as the regression and the two sets of numbers can be compared side by side. same_exp is only observed in waves 0-1, so its rows use those waves only. This table is the main moderator result whatever the validation section finds.
 
 ```{r moderator-table}
+# Define common pre-treatment controls included in all interaction regressions.
+# These help account for differences in other resume characteristics.
 common_controls <- c(
   "female",
   "ba_quality",
@@ -609,14 +710,29 @@ common_controls <- c(
   "exp_highquality"
 )
 
+# function to compare regression and causal forest estimates
+# for each pre-specified moderator.
 moderator_rows <- function(v) {
+
+  # Restrict the analysis to resumes where the moderator is observed.
+  # This is particularly important for same_exp, which is missing in wave 2.
   obs   <- !is.na(df_int1[[v]])            # resumes where the moderator is observed
   dat   <- df_int1[obs, ]
+  
+  # Define the callback outcome and binary moderator.
   dat$y  <- as.numeric(dat$callback)
   dat$m  <- dat[[v]]
+
+  # indicator created for resumes without the moderator (m = 0).  
   dat$m0 <- 1 - dat$m
 
-  # beta3: name x moderator interaction
+  
+  
+  # REGRESSION 1: Interaction model
+  # Estimate whether the name penalty changes when the moderator
+  # switches from 0 to 1.
+  # D:m is the interaction coefficient (beta3).
+  # A significant beta3 indicates evidence of treatment effect heterogeneity.
   fit_int <- lm_robust(
     reformulate(
       c("D", "m", "D:m", common_controls, "factor(fall_data)"),
@@ -626,8 +742,16 @@ moderator_rows <- function(v) {
     clusters = firmid,
     se_type = "CR2"
   )
-  # The same model written so the two name effects come out directly:
-  # D:m0 = name effect when m = 0, D:m = name effect when m = 1
+  
+  
+  
+  
+  # REGRESSION 2: Reparameterised interaction model
+  # Estimate the name penalty directly for each moderator group.
+  # D:m0 = name effect when moderator = 0.
+  # D:m  = name effect when moderator = 1.
+  # This is equivalent to the first regression but reports
+  # subgroup treatment effects directly.
   fit_grp <- lm_robust(
     reformulate(
       c("D:m0", "D:m", "m", common_controls, "factor(fall_data)"),
@@ -637,11 +761,20 @@ moderator_rows <- function(v) {
     clusters = firmid,
     se_type = "CR2"
   )
+
+  
+  # CAUSAL FOREST: Estimate the subgroup ATE for each moderator value.
+  # Use the fitted CF2 forest to obtain treatment effects for
+  # the same moderator groups considered in the regressions.
   forest_effect <- function(value) {
     idx <- which(obs & df_int1[[v]] == value)
     a   <- average_treatment_effect(cf2, subset = idx)
     c(n = length(idx), est = 100 * a[["estimate"]], se = 100 * a[["std.err"]])
   }
+  
+  # Create two tables:
+  # (1) Subgroup treatment effects from regression and forest.
+  # (2) Regression interaction tests for treatment effect heterogeneity.  
   f0 <- forest_effect(0)
   f1 <- forest_effect(1)
 
@@ -650,11 +783,19 @@ moderator_rows <- function(v) {
       moderator    = v,
       value        = c(0, 1),
       n            = c(f0[["n"]], f1[["n"]]),
+      
+      # Regression-based subgroup treatment effects and standard errors.
       regression   = 100 * unname(coef(fit_grp)[c("D:m0", "D:m")]),
       regression_se = 100 * unname(fit_grp$std.error[c("D:m0", "D:m")]),
+      
+      
+      # Causal forest subgroup ATEs and standard errors.
       forest       = c(f0[["est"]], f1[["est"]]),
       forest_se    = c(f0[["se"]], f1[["se"]])
     ),
+    
+    # Extract the interaction coefficient from the first regression.
+    # beta3 measures the change in the name penalty when m changes from 0 to 1.
     interaction = data.frame(
       moderator = v,
       n         = nrow(dat),
@@ -666,13 +807,24 @@ moderator_rows <- function(v) {
   )
 }
 
+
+# Comparison function for all 3 moderators
 moderator_res <- lapply(moderators, moderator_rows)
 
+
+
+# Table 1: comparison between regression and causal forest subgroup treatmnet effects
 kable(bind_rows(lapply(moderator_res, `[[`, "groups")), digits = 2,
       col.names = c("moderator", "m", "resumes", "regression (pp)", "SE",
                     "forest cf2 (pp)", "SE"),
       caption = "Name effect by moderator value, same resumes in both columns (pp)")
 
+
+# Table2 formal regression interaction tests
+# beta3 = difference in the name penalty between moderator = 1 and moderator = 0.
+# The p-value tests the null hypothesis that beta3 = 0.
+# Wave fixed effects control for differences across experimental waves.
+# CR2 standard errors account for employer-level clustering.
 kable(bind_rows(lapply(moderator_res, `[[`, "interaction")), digits = 3,
       col.names = c("moderator", "resumes", "firms", "beta3 (pp)", "SE (pp)", "p"),
       caption = paste("Interaction test: change in the name effect when the",
@@ -684,18 +836,36 @@ kable(bind_rows(lapply(moderator_res, `[[`, "interaction")), digits = 3,
 The BLP regresses cf2's doubly robust scores on the three moderators (`A`). The other covariates still enter through cf2's nuisance estimates; `A` only sets what the effect is summarised on. The coefficients are a joint linear approximation: they do not hold the other covariates fixed, and they need not match the one-at-a-time interaction terms above when the moderators are correlated. Resumes where any moderator is missing are excluded with `subset`, so this uses waves 0-1 (same_exp is missing in wave 2). The intercept is the effect when all three moderators are 0.
 
 ```{r cate-blp}
+# Extract the three moderators from CF2's covariate matrix.
+# These are language skills, extracurricular skills, and same experience.
 A_mod  <- X_cf2[, moderators, drop = FALSE]
+
+
+# Restrict the analysis to resumes with all three moderators observed.
+#  excludes resumes with missing moderator values,
+# particularly wave 2 where same_exp is unavailable.
 blp_ok <- which(complete.cases(A_mod))
+
+# Report the number of resumes and unique employers used in the BLP.
 cat("Resumes used:", length(blp_ok),
     "| firms:", length(unique(firm_id[blp_ok])), "\n\n")
 
+
+
+# Estimate the Best Linear Projection of CF2 treatment effects
+# onto the three pre-specified moderators.
+# Each coefficient measures the association between a moderator
+# and the estimated name penalty, holding other moderators constant.
 blp <- best_linear_projection(cf2, A_mod, subset = blp_ok)
 print(blp)
 ```
 
+
+
+
 ### Predicted effect by covariate cell (cf1w)
 
-cf1w has only a few distinct covariate combinations, so show them directly (same_exp = NA is wave 2).
+cf1w has only a few distinct covariate combinations, so show them directly (same_exp = NA is wave 2). It examines how the predicted name penalty varies across different combinations of the three pre-specified moderators using CF1W.
 
 ```{r cate-cf1w-cells}
 cf1w_cells <- df_int1 %>%
