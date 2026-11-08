@@ -16,21 +16,26 @@ The raw Stata file is in `data/` and is not modified. The analysis sample keeps 
 
 ## Repository structure
 
-| Path | Type | Purpose |
-| --- | --- | --- |
-| `data/oreopoulos-resume-study-replication-data-file.dta` | Raw data | Original Stata file, unchanged |
-| `cleaned_data.Rmd` | Script (step 1) | Cleans the data and writes `cleaned data.Rda` |
-| `cleaned data.Rda` | Data | Cleaned analysis sample (data frame `df_int1`) |
-| `Causal Forest Balance Table.Rmd` | Script (step 2) | Covariate balance tables and tests |
-| `Causal-Forest-Balance-Table.pdf` | Output | Rendered output of step 2 |
-| `regression_working/interaction_regression_updated.Rmd` | Script (step 3) | ATE and interaction regressions |
-| `regression_working/interaction_regression_updated.html` | Output | Rendered output of step 3 |
-| `Causal_Forest.Rmd` | Script (step 4) | Causal forests, results and validation |
-| `Causal_Forest.pdf`, `Causal_Forest.html` | Output | Rendered outputs of step 4 |
-| `figures/figure1_rate.png` | Output | RATE/TOC figure, written by step 4 |
-| `comparing_subgroup_treatment_effect_plot.R` | Script (step 5) | Regression-versus-forest subgroup figure (built from estimates copied from step 4) |
-| `archive/` | Folder | Superseded exploratory scripts, not needed for reproduction |
-
+```
+DSE4101-Immigrant-Discrimination-Project/
+├── data/
+│   └── oreopoulos-resume-study-replication-data-file.dta   # raw data (Stata), unchanged
+├── cleaned_data.Rmd                            # step 1: cleaning; writes "cleaned data.Rda"
+├── cleaned data.Rda                            # cleaned analysis sample (df_int1)
+├── Causal Forest Balance Table.Rmd             # step 2: covariate balance
+├── Causal-Forest-Balance-Table.pdf             # rendered output of step 2
+├── regression_working/
+│   ├── interaction_regression_updated.Rmd      # step 3: ATE and interaction regressions
+│   └── interaction_regression_updated.html     # rendered output of step 3
+├── Causal_Forest.Rmd                           # step 4: forests, results and validation
+├── Causal_Forest.pdf                           # rendered output of step 4
+├── Causal_Forest.html                          # rendered output of step 4
+├── figures/
+│   └── figure1_rate.png                        # RATE/TOC figure, written by step 4
+├── sessionInfo.txt                             # R and package versions, written by step 4
+├── comparing_subgroup_treatment_effect_plot.R  # step 5: subgroup comparison figure
+└── archive/                                    # superseded exploratory scripts (not needed)
+```
 ## How to reproduce
 
 1. Clone the repository and keep its folder structure. The scripts use relative paths, so do not move or rename files (including the spaces in `cleaned data.Rda` and `Causal Forest Balance Table.Rmd`).
