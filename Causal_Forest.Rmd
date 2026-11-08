@@ -966,13 +966,57 @@ rate_tab %>%
 
 TOC curves for the headline split. The three-moderator forest (cf1w) can produce only a few distinct predictions, so many resumes are tied in the ranking and its curve will look stepped; mention this in the write-up.
 
-```{r val-toc-plots, fig.height=4}
-for (nm in names(rate_res)) {
-  plot(rate_res[[nm]][["1"]]$autoc, main = paste("TOC (AUTOC):", nm),
-       xlab = "Share treated (q), smallest predicted penalty first")
-}
-```
+```{r fig-rate, fig.width=11, fig.height=3.6}
+library(patchwork)
 
+fig_col <- c(cf1w = "#E69F00", cf2 = "#0072B2")
+
+# Panel A: AUTOC by firm split, with 95% intervals (percentage points)
+rate_plot <- rate_tab %>%
+  mutate(forest = short_name(forest),
+         x      = seed + ifelse(forest == "cf1w", -0.12, 0.12))
+
+panel_a <- ggplot(rate_plot, aes(x = x, y = 100 * autoc, colour = forest)) +
+  geom_hline(yintercept = 0, linetype = "dashed", colour = "grey50") +
+  geom_errorbar(aes(ymin = 100 * autoc_lo, ymax = 100 * autoc_hi),
+                width = 0.08, linewidth = 0.5) +
+  geom_point(size = 1.8) +
+  scale_colour_manual(values = fig_col, breaks = c("cf1w", "cf2"), name = NULL) +
+  scale_x_continuous(breaks = 1:n_seeds) +
+  labs(title = "A. AUTOC by split, 95% interval",
+       x = "Firm split (seed 1 = headline)", y = "AUTOC (percentage points)") +
+  theme_classic(base_size = 9) +
+  theme(plot.title = element_text(size = 9, hjust = 0))
+
+# Panels B and C: TOC curve for the headline split (seed 1) with 95% bands.
+# rank_average_treatment_effect() stores the curve in $TOC (columns estimate, std.err, q).
+toc_panel <- function(nm, title) {
+  toc <- as.data.frame(rate_res[[nm]][["1"]]$autoc$TOC)
+  col <- fig_col[[short_name(nm)]]
+  ggplot(toc, aes(x = q)) +
+    geom_hline(yintercept = 0, linetype = "dashed", colour = "grey50") +
+    geom_ribbon(aes(ymin = 100 * (estimate - 1.96 * std.err),
+                    ymax = 100 * (estimate + 1.96 * std.err)),
+                fill = col, alpha = 0.18) +
+    geom_line(aes(y = 100 * estimate), colour = col, linewidth = 0.8) +
+    labs(title = title, x = "Share of resumes ranked, q",
+         y = "TOC(q) (percentage points)") +
+    theme_classic(base_size = 9) +
+    theme(plot.title = element_text(size = 9, hjust = 0))
+}
+
+panel_b <- toc_panel("cf2 (full covariates)",      "B. TOC curve, cf2 (seed 1)")
+panel_c <- toc_panel("cf1w (3 moderators + wave)", "C. TOC curve, cf1w (seed 1)")
+
+figure1 <- (panel_a + panel_b + panel_c) +
+  plot_layout(widths = c(1.15, 1, 1), guides = "collect") &
+  theme(legend.position = "bottom")
+print(figure1)
+
+# Save a copy for the report
+dir.create("figures", showWarnings = FALSE)
+ggsave("figures/figure1_rate.png", figure1, width = 11, height = 3.6, dpi = 300)
+```
 ## Combined reading (rule fixed in advance)
 
 Both checks support heterogeneity: calibration differential coefficient positive and significant (one-sided p < 0.05) and the headline AUTOC interval excluding 0. Neither supports it: report that we find no statistically reliable evidence of heterogeneity, and do not interpret forest subgroup patterns. They disagree: call the evidence inconclusive and treat any subgroup patterns as exploratory only. A null here may reflect low power, not constant effects. If the verdict is a null, covariate means across held-out priority groups are not reported: that descriptive step is only meaningful when the RATE is clearly non-zero.
@@ -1062,3 +1106,4 @@ stab_tab %>%
 ```
 
 Reading it: the verdict is stable if every forest still has a calibration p above 0.05 and an AUTOC interval that includes 0 under the alternative setting. If one forest flips, report it as sensitive to tuning and treat the evidence for that forest as inconclusive under your combined rule.
+
