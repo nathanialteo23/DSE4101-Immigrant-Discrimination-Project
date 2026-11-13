@@ -58,7 +58,6 @@ all_pretreat_cov <- c(
   )
 # df_int1 comes from cleaned_data.Rmd: Canadian-named (control) and Chinese/Indian/
 # Pakistani-named (treated) resumes, D = 1 for a foreign name.
-# Missing values are NOT recoded there: same_exp is NA for every resume in wave 2, and reference, accreditation and legal (wave 2 only) are NA for every resume in waves 0-1. Refer to missing values check below
 # grf uses missing covariate values directly; the tables that need observed values (balance, moderator table, BLP) use waves 0-1 for same_exp.
 
 
@@ -108,7 +107,7 @@ These checks use the data only (no forest). For covariate balance and wave compo
 
 ## Missing values across waves
 
-The cleaned data keeps missing values as they are, so this shows what is really missing: same_exp is missing for all of wave 2, and reference, accreditation and legal are missing for all of waves 0-1 (they were only on the wave 2 resumes).
+The cleaned data keeps missing values as they are, so this shows what is really missing: same_exp is missing for all of wave 2.
 
 ```{r missing-by-wave}
 vars <- c(all_pretreat_cov)
