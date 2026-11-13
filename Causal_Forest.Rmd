@@ -58,10 +58,8 @@ all_pretreat_cov <- c(
   )
 # df_int1 comes from cleaned_data.Rmd: Canadian-named (control) and Chinese/Indian/
 # Pakistani-named (treated) resumes, D = 1 for a foreign name.
-# Missing values are NOT recoded there: same_exp is NA for every resume in wave 2, and
-# reference, accreditation and legal (wave 2 only) are NA for every resume in waves 0-1
-# (see the missing-value check below). grf uses missing covariate values directly; the
-# tables that need observed values (balance, moderator table, BLP) use waves 0-1 for same_exp.
+# Missing values are NOT recoded there: same_exp is NA for every resume in wave 2, and reference, accreditation and legal (wave 2 only) are NA for every resume in waves 0-1. Refer to missing values check below
+# grf uses missing covariate values directly; the tables that need observed values (balance, moderator table, BLP) use waves 0-1 for same_exp.
 
 
 ```
@@ -313,8 +311,7 @@ Both forests use the same outcome (callback), treatment (D, foreign-sounding nam
 The waves differ in design (same_exp is only on the resumes of waves 0-1, and wave 1 uses Pakistani names only), so the forest needs the wave to separate "this moderator matters" from "this wave was different". The wave also enters the forest's propensity (`W.hat`) and outcome (`Y.hat`) models, which absorbs differences in treated share and baseline callback rate across waves. Both forests are validated and reported; neither is picked after the fact. same_exp (NA in wave 2) and reference, accreditation and legal (NA in waves 0-1) are passed to grf as is (grf handles missing covariate values natively).
 
 ```{r forest-specs}
-# The wave is included in both forests: the waves differ in design, so the forest needs it
-# to separate "this moderator matters" from "this wave was different".
+# The wave is included in both forests: the waves differ in design, so the forest needs it to separate "this moderator matters" from "this wave was different".
 
 covariate_sets <- list(
   "cf1w (3 moderators + wave)" = c(moderators, "wave_1","wave_2"),
@@ -344,16 +341,15 @@ fit_forest <- function(vars) {
   # Y_all: callback outcome (0/1).
   # W_all: foreign-sounding name treatment (0/1).
   # clusters: accounts for dependence among resumes sent to the same employer.
-  # grf internally estimates nuisance functions, including propensity scores
-  # and expected outcomes, unless these are supplied separately.
+  # grf internally estimates nuisance functions, including propensity scores and expected outcomes, unless these are supplied separately.
   list(cf = causal_forest(X, Y_all, W_all, clusters = firm_id), X = X)
 }
 
 
 
 # APPLY THE FITTING FUNCTION TO BOTH COVARIATE SPECIFICATIONS
-# CF1W: three pre-specified moderators + wave indicators.
-# CF2: full set of pre-treatment covariates.
+# cf1w: three pre-specified moderators + wave indicators.
+# cf2: full set of pre-treatment covariates.
 forests <- lapply(covariate_sets, fit_forest)
 
 
@@ -376,7 +372,6 @@ Compares the average treatment effect (ATE) of foreign-sounding names on callbac
 - Comparison across specifications: Examines whether CF1W and CF2 produce similar average treatment effects despite using different sets of covariates.
 
 
-About `average_treatment_effect` : causal forest uses propensity scores (the estimated probability of receiving treatment) when calculating the Average Treatment Effect (ATE).
 ```{r ate}
 # Loop through both forest specifications (CF1W and CF2).
 ate_tab <- bind_rows(lapply(names(forests), function(nm) {
@@ -532,7 +527,7 @@ other_covariates <- c(
 # These variables will be used to define subgroups for CF2.
 cf2_vars <- c(moderators, other_covariates)
 
-# Estimate subgroup Average Treatment Effects (ATEs) using CF2.
+# estimate subgroup Average Treatment Effects (ATEs) using CF2.
 # Each subgroup is defined by a particular value of a covariate.
 subgroup_results <- lapply(cf2_vars, function(v) {
 
@@ -592,7 +587,7 @@ subgroup_df <- bind_rows(subgroup_results) %>%
 plot_subgroup_ci <- function(data, vars, title, ncol = 3) {
 
 
-  # Select the requested covariates and preserve their order.
+  # Select the covariates and preserve their order.
   plot_data <- data %>%
     filter(covariate %in% vars) %>%
     mutate(
@@ -652,8 +647,7 @@ plot_subgroup_ci <- function(data, vars, title, ncol = 3) {
 ### GRAPH 1: Plot subgroup ATEs for the three pre-specified moderators.
 The graph compares the estimated name penalty between resumes with and without language skills, extracurricular skills, and matching work experience.
 ```{r}
-# Compare the estimated name penalty across different values
-# of language skills, extracurricular skills, and same experience.
+# Compare the estimated name penalty across different values of language skills, extracurricular skills, and same experience.
 
 plot_moderators <- plot_subgroup_ci(
   subgroup_df,
@@ -672,8 +666,7 @@ print(plot_moderators)
 This examines whether the estimated name penalty varies across the remaining pre-treatment resume characteristics and experimental wave indicators using CF2.
 
 ```{r cate-ci-pretreat-plot, fig.width=11, fig.height=7}
-# Plot subgroup ATEs for each of the remaining pre-treatment covariates and
-# experimental wave indicators using the previously defined function.
+# Plot subgroup ATEs for the remaining pre-treatment covariates and experimental wave indicators using the previously defined function.
 plot_other <- plot_subgroup_ci(
   subgroup_df,
   other_covariates,
@@ -718,10 +711,8 @@ cat("Resumes used:", length(blp_ok),
 
 
 
-# Estimate the Best Linear Projection of CF2 treatment effects
-# onto the three pre-specified moderators.
-# Each coefficient measures the association between a moderator
-# and the estimated name penalty, holding other moderators constant.
+# Estimate the Best Linear Projection of CF2 treatment effects onto the three pre-specified moderators.
+# Each coefficient measures the association between a moderator and the estimated name penalty, holding other moderators constant.
 blp <- best_linear_projection(cf2, A_mod, subset = blp_ok)
 print(blp)
 ```
@@ -790,8 +781,7 @@ make_split <- function(firm, seed) {
 # Train on one half of the firms and evaluate on the other half.
 # `targets` picks the RATE measures to compute (one list element each: autoc, qini).
 # `...` passes extra arguments (e.g. tuning settings) to causal_forest.
-# The RATE standard errors are bootstrapped, so computing extra targets uses up
-# random draws; the tuning check asks for AUTOC only so its draws stay unchanged.
+# RATE standard errors are bootstrapped, so computing extra targets uses up random draws; the tuning check asks for AUTOC only so its draws stay unchanged.
 run_rate <- function(X, Y, W, firm, train, seed, targets = c("AUTOC", "QINI"), ...) {
   cf_train <- causal_forest(X[train, , drop = FALSE],  Y[train],  W[train],
                             clusters = firm[train],  seed = seed, ...)
