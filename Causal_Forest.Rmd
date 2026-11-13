@@ -307,7 +307,7 @@ Both forests use the same outcome (callback), treatment (D, foreign-sounding nam
 - **cf1w**: the three moderators plus the wave (two dummies, wave_1 and wave_2), so it is the like-for-like comparison with the wave-adjusted regressions.
 - **cf2**: all pre-treatment covariates plus the wave dummies.
 
-The waves differ in design (same_exp is only on the resumes of waves 0-1, and wave 1 uses Pakistani names only), so the forest needs the wave to separate "this moderator matters" from "this wave was different". The wave also enters the forest's propensity (`W.hat`) and outcome (`Y.hat`) models, which absorbs differences in treated share and baseline callback rate across waves. Both forests are validated and reported; neither is picked after the fact. same_exp (NA in wave 2) and reference, accreditation and legal (NA in waves 0-1) are passed to grf as is (grf handles missing covariate values natively).
+The waves differ in design (same_exp is only on the resumes of waves 0-1, and wave 1 uses Pakistani names only), so the forest needs the wave to separate "this moderator matters" from "this wave was different". The wave also enters the forest's propensity (`W.hat`) and outcome (`Y.hat`) models, which absorbs differences in treated share and baseline callback rate across waves. Both forests are validated and reported; neither is picked after the fact. same_exp (NA in wave 2) was passed to grf as is (grf handles missing covariate values natively).
 
 ```{r forest-specs}
 # The wave is included in both forests: the waves differ in design, so the forest needs it to separate "this moderator matters" from "this wave was different".
