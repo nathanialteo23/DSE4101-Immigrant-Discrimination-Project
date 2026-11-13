@@ -15,7 +15,7 @@ knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE)
 # Setup
 
 ```{r setup}
-required_packages <- c("haven", "estimatr", "dplyr", "modelsummary")
+required_packages <- c("haven", "estimatr", "dplyr", "tidyr", "modelsummary")
 missing_packages  <- setdiff(required_packages, rownames(installed.packages()))
 if (length(missing_packages) > 0) {
   install.packages(missing_packages, repos = "https://cloud.r-project.org")
